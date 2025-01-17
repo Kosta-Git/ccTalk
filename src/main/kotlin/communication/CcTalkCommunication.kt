@@ -1,0 +1,4 @@
+package communication
+
+class CcTalkCommunication {
+}
