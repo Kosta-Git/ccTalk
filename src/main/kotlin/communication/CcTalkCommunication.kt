@@ -1,4 +1,0 @@
-package communication
-
-class CcTalkCommunication {
-}

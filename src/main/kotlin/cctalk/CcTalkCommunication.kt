@@ -1,0 +1,4 @@
+package cctalk
+
+class CcTalkCommunication {
+}
