@@ -50,6 +50,7 @@ class PayoutDevice(
   fun isCurrentlyPurging(): Boolean = isPurging && multiCoin
 
   suspend fun payoutStatus(): Either<CcTalkStatus, PayoutStatus> {
+    // Same thing but without event count
     return extendedPayoutStatus()
       .map { it.toPayoutStatus() }
   }
@@ -90,6 +91,7 @@ class PayoutDevice(
   }
 
   suspend fun whPayoutStatus(): Either<CcTalkStatus, WhPayoutStatus> {
+    // It's getting the event data but differently???
     val statusEither = talkCc { header(133u) }
     if (statusEither.isLeft()) return (statusEither.leftOrNull() ?: CcTalkStatus.Unknown).left()
 
