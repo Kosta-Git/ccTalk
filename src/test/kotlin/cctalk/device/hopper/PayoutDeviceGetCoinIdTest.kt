@@ -5,7 +5,7 @@ import be.inotek.communication.CcTalkChecksumTypes
 import be.inotek.communication.packet.CcTalkPacket
 import cctalk.CcTalkStatus
 import cctalk.device.PayoutDevice
-import cctalk.device.PayoutMode
+import cctalk.device.PayoutDevice.PayoutMode
 import cctalk.device.TestCcTalkPort
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
