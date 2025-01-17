@@ -139,18 +139,17 @@ class PayoutDevice(
     val levelSensorDataLength = levelSensor.dataLength.toInt()
     if (levelSensorDataLength < 0) return CcTalkStatus.DataFormat.left()
 
-    var lowLevelSensorStatus = PayoutSensorStatus.NotSupported
-    if ((levelSensor.data[0].toInt() and 0x10) != 0) {
-      if ((levelSensor.data[0].toInt() and 0x01) == 0) lowLevelSensorStatus = PayoutSensorStatus.Triggered
-      else lowLevelSensorStatus = PayoutSensorStatus.Untriggered
-    }
-    var highLevelSensorStatus = PayoutSensorStatus.NotSupported
-    if ((levelSensor.data[0].toInt() and 0x20) != 0) {
-      if ((levelSensor.data[0].toInt() and 0x02) == 0) highLevelSensorStatus = PayoutSensorStatus.Triggered
-      else highLevelSensorStatus = PayoutSensorStatus.Untriggered
-    }
-
+    var lowLevelSensorStatus = computeSensorStatus(levelSensor.data[0], isHighLevel = false)
+    var highLevelSensorStatus = computeSensorStatus(levelSensor.data[0], isHighLevel = true)
     return HopperSensorLevels(lowLevelSensorStatus, highLevelSensorStatus).right()
+  }
+
+  private fun computeSensorStatus(value: UByte, isHighLevel: Boolean): PayoutSensorStatus {
+    val supportedFlag = if (isHighLevel) 0x20 else 0x10
+    val isTriggeredFlag = if (isHighLevel) 0x02 else 0x01
+
+    if ((value.toInt() and supportedFlag) == 0) return PayoutSensorStatus.NotSupported
+    return if ((value.toInt() and isTriggeredFlag) == 0) PayoutSensorStatus.Triggered else PayoutSensorStatus.Untriggered
   }
 
   private suspend fun getHopperStatusTest(): Either<CcTalkStatus, EnumSet<PayoutStatusFlag>> {
