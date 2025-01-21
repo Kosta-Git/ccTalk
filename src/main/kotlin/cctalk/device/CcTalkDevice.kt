@@ -2,6 +2,7 @@ package cctalk.device
 
 import arrow.core.Either
 import be.inotek.communication.CcTalkChecksumTypes
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.serial.CcTalkPort
 
@@ -14,7 +15,7 @@ open class CcTalkDevice(
     const val SOURCE_ADDRESS: UByte = 1u
   }
 
-  suspend fun deviceCategory(): Either<CcTalkStatus, String> =
+  suspend fun deviceCategory(): Either<CcTalkError, String> =
     talkCcStringResponse {
       destination(address.toUByte())
       source(CcTalkCommand.SOURCE_ADDRESS)
@@ -22,15 +23,11 @@ open class CcTalkDevice(
       checksumType(checksumType)
     }
 
-  suspend fun simplePoll(): CcTalkStatus {
-    return talkCc {
+  suspend fun simplePoll(): Either<CcTalkError, CcTalkStatus> =
+    talkCcNoResponse {
       destination(address.toUByte())
       source(CcTalkCommand.SOURCE_ADDRESS)
       header(254u)
       checksumType(checksumType)
-    }.fold(
-      { error -> error },
-      { response -> CcTalkStatus.Ok }
-    )
-  }
+    }
 }

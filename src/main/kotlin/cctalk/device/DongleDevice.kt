@@ -1,6 +1,9 @@
 package cctalk.device
 
+import arrow.core.Either
+import arrow.core.raise.either
 import be.inotek.communication.CcTalkChecksumTypes
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.LedStatus
 import cctalk.has
@@ -14,13 +17,15 @@ class DongleDevice(
 ) : CcTalkDevice(port, address, checksumType) {
 
   @OptIn(ExperimentalUnsignedTypes::class)
-  suspend fun setLedState(ledNumber: Int, status: LedStatus, time: Int): CcTalkStatus {
-    if (ledNumber < 0 || ledNumber > 7) return CcTalkStatus.WrongParameter
-    if (status.has(LedStatus.BLINK) && time !in 50..12500) return CcTalkStatus.WrongParameter
+  suspend fun setLedState(ledNumber: Int, status: LedStatus, time: Int): Either<CcTalkError, CcTalkStatus> = either {
+    if (ledNumber < 0 || ledNumber > 7)
+      raise(CcTalkError.WrongParameterError("led number must be between 0 and 7, got: $ledNumber"))
+    if (status.has(LedStatus.BLINK) && time !in 50..12500)
+      raise(CcTalkError.WrongParameterError("time must be between 50 and 12500, got: $time"))
 
-    talkCc {
-      var payload = ByteArray(2);
-      payload[0] = ledNumber.toByte();
+    talkCcNoResponse {
+      var payload = ByteArray(2)
+      payload[0] = ledNumber.toByte()
       when (status) {
         LedStatus.OFF -> {
           header(107u)
@@ -41,9 +46,6 @@ class DongleDevice(
       source(CcTalkCommand.SOURCE_ADDRESS)
       data(payload.toUByteArray())
       checksumType(checksumType)
-    }.fold(
-      { error -> return error },
-      { response -> return CcTalkStatus.Ok }
-    )
+    }.bind()
   }
 }

@@ -1,9 +1,11 @@
 package cctalk.device
 
 import arrow.core.Either
-import arrow.core.left
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import arrow.core.right
 import be.inotek.communication.CcTalkChecksumTypes
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.currency.CoinValue
 import cctalk.currency.Currency
@@ -49,37 +51,24 @@ class PayoutDevice(
 
   fun isCurrentlyPurging(): Boolean = isPurging && multiCoin
 
-  suspend fun payoutStatus(): Either<CcTalkStatus, PayoutStatus> {
-    // Same thing but without event count
-    return extendedPayoutStatus()
-      .map { it.toPayoutStatus() }
-  }
+  // Same thing but without event count
+  suspend fun payoutStatus(): Either<CcTalkError, PayoutStatus> = extendedPayoutStatus().map { it.toPayoutStatus() }
 
-  suspend fun extendedPayoutStatus(): Either<CcTalkStatus, PayoutStatusExtended> {
+  suspend fun extendedPayoutStatus(): Either<CcTalkError, PayoutStatusExtended> = either {
     // Get hopper status
     var statuses = EnumSet.noneOf<PayoutStatusFlag>(PayoutStatusFlag::class.java)
-    val hopperStatus = getHopperStatusTest()
-    if (hopperStatus.isLeft()) return (hopperStatus.leftOrNull() ?: CcTalkStatus.Unknown).left()
-    hopperStatus.getOrNull()?.forEach { statuses::add }
+    getHopperStatusTest().bind().forEach { statuses::add }
 
     // Retrieve event data
-    val eventsDataEither = talkCc { header(166u) }
-    if (eventsDataEither.hasError()) return eventsDataEither.error().left()
-    val eventsData = eventsDataEither.packet()
-    val eventsDataLength = eventsData.dataLength.toInt()
-    if (eventsDataLength < 4) return CcTalkStatus.DataFormat.left()
+    val eventsData = talkCc { header(166u) }.bind()
+    ensure(eventsData.dataLength.toInt() >= 4) { CcTalkError.DataFormatError(4, eventsData.dataLength.toInt()) }
     if (eventsData.data[0].toInt() == 0) statuses.add(PayoutStatusFlag.Reset)
-    var events = eventsData.data[0].toInt()
-    var remaining = eventsData.data[1].toInt()
-    var lastPayout = eventsData.data[2].toInt()
-    var lastUnpaid = eventsData.data[3].toInt()
+    val (events, remaining, lastPayout, lastUnpaid) = eventsData.data.map { it.toInt() }
 
     // Perform sensor level check
-    val sensorLevelsEither = getHopperSensors()
-    if (sensorLevelsEither.isLeft()) return (sensorLevelsEither.leftOrNull() ?: CcTalkStatus.Unknown).left()
-    var (lowLevel, highLevel) = sensorLevelsEither.getOrNull() ?: HopperSensorLevels()
+    var (lowLevel, highLevel) = getHopperSensors().bind()
 
-    return PayoutStatusExtended(
+    PayoutStatusExtended(
       event = events,
       status = statuses,
       remaining = remaining,
@@ -87,25 +76,22 @@ class PayoutDevice(
       lastUnpaid = lastUnpaid,
       lowLevelSensorStatus = lowLevel,
       highLevelSensorStatus = highLevel,
-    ).right()
+    )
   }
 
-  suspend fun whPayoutStatus(): Either<CcTalkStatus, WhPayoutStatus> {
+  suspend fun whPayoutStatus(): Either<CcTalkError, WhPayoutStatus> = either {
     // It's getting the event data but differently???
-    val statusEither = talkCc { header(133u) }
-    if (statusEither.isLeft()) return (statusEither.leftOrNull() ?: CcTalkStatus.Unknown).left()
-
-    val status = statusEither.getOrNull()!!
+    val status = talkCc { header(133u) }.bind()
     val dataLength = status.dataLength.toInt()
+    ensure(dataLength >= 3) { CcTalkError.DataFormatError(3, dataLength) }
 
-    if (dataLength < 3) return CcTalkStatus.DataFormat.left()
     var statuses = EnumSet.noneOf<PayoutStatusFlag>(PayoutStatusFlag::class.java)
     if (status.data[0].toInt() == 0) statuses and PayoutStatusFlag.Reset
     var remaining = 0.0
     isPurging = status.data[1].toInt() == 255 && status.data[2].toInt() == 255
     if (!isPurging) remaining = (status.data[1].toDouble() + 256 * status.data[2].toDouble()) / 100.0
-    var lastPayout = (status.data[3].toDouble() + 256 * status.data[4].toDouble()) / 100.0
-    var lastUnpaid = (status.data[5].toDouble() + 256 * status.data[6].toDouble()) / 100.0
+    val lastPayout = (status.data[3].toDouble() + 256 * status.data[4].toDouble()) / 100.0
+    val lastUnpaid = (status.data[5].toDouble() + 256 * status.data[6].toDouble()) / 100.0
 
     if (isPurging) return WhPayoutStatus(
       status = EnumSet.of<PayoutStatusFlag>(PayoutStatusFlag.Purging),
@@ -115,35 +101,29 @@ class PayoutDevice(
     ).right()
 
     // Perform status check
-    val hopperStatus = getHopperStatusTest()
-    if (hopperStatus.isLeft()) return (hopperStatus.leftOrNull() ?: CcTalkStatus.Unknown).left()
-    hopperStatus.getOrNull()?.forEach { statuses::add }
+    getHopperStatusTest().bind().forEach { statuses::add }
 
     // Perform sensor level check
-    val sensorLevelsEither = getHopperSensors()
-    if (sensorLevelsEither.isLeft()) return (sensorLevelsEither.leftOrNull() ?: CcTalkStatus.Unknown).left()
-    var (lowLevel, highLevel) = sensorLevelsEither.getOrNull() ?: HopperSensorLevels()
+    var (lowLevel, highLevel) = getHopperSensors().bind()
 
-    return WhPayoutStatus(
+    WhPayoutStatus(
       status = statuses,
       remaining = remaining,
       lastPayout = lastPayout,
       lastUnpaid = lastUnpaid,
       lowLevelSensorStatus = lowLevel,
       highLevelSensorStatus = highLevel
-    ).right()
+    )
   }
 
-  private suspend fun getHopperSensors(): Either<CcTalkStatus, HopperSensorLevels> {
-    val levelSensorEither = talkCc { header(217u) }
-    if (levelSensorEither.isLeft()) return (levelSensorEither.leftOrNull() ?: CcTalkStatus.Unknown).left()
-    val levelSensor = levelSensorEither.getOrNull()!!
-    val levelSensorDataLength = levelSensor.dataLength.toInt()
-    if (levelSensorDataLength < 0) return CcTalkStatus.DataFormat.left()
+  private suspend fun getHopperSensors(): Either<CcTalkError, HopperSensorLevels> = either {
+    val levelSensor = talkCc { header(217u) }.bind()
+    ensure(levelSensor.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, levelSensor.dataLength.toInt()) }
 
-    var lowLevelSensorStatus = computeSensorStatus(levelSensor.data[0], isHighLevel = false)
-    var highLevelSensorStatus = computeSensorStatus(levelSensor.data[0], isHighLevel = true)
-    return HopperSensorLevels(lowLevelSensorStatus, highLevelSensorStatus).right()
+    HopperSensorLevels(
+      lowLevel = computeSensorStatus(levelSensor.data[0], isHighLevel = false),
+      highLevel = computeSensorStatus(levelSensor.data[0], isHighLevel = true)
+    )
   }
 
   private fun computeSensorStatus(value: UByte, isHighLevel: Boolean): PayoutSensorStatus {
@@ -154,13 +134,9 @@ class PayoutDevice(
     return if ((value.toInt() and isTriggeredFlag) == 0) PayoutSensorStatus.Triggered else PayoutSensorStatus.Untriggered
   }
 
-  private suspend fun getHopperStatusTest(): Either<CcTalkStatus, EnumSet<PayoutStatusFlag>> {
-    val statusTestEither = talkCc { header(163u) }
-    if (statusTestEither.hasError()) return statusTestEither.error().left()
-
-    val packet = statusTestEither.packet()
-    val dataLength = packet.dataLength.toInt()
-    if (dataLength == 0) return CcTalkStatus.DataFormat.left()
+  private suspend fun getHopperStatusTest(): Either<CcTalkError, EnumSet<PayoutStatusFlag>> = either {
+    val packet = talkCc { header(163u) }.bind()
+    ensure(packet.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, packet.dataLength.toInt()) }
 
     var statuses = EnumSet.noneOf<PayoutStatusFlag>(PayoutStatusFlag::class.java)
     packet.data
@@ -168,159 +144,122 @@ class PayoutDevice(
       .map { PayoutStatusFlag::fromCode }
       .forEach { statuses::add }
 
-    return statuses.right()
+    statuses
   }
 
-  suspend fun setPayoutEnabled(enabled: Boolean): CcTalkStatus {
-    return talkCc {
+  suspend fun setPayoutEnabled(enabled: Boolean):  Either<CcTalkError, CcTalkStatus> = either {
+    talkCc {
       header(164u)
       data(ubyteArrayOf(if (enabled) 165u else 0u))
-    }.fold(
-      { return it },
-      { return CcTalkStatus.Ok }
-    )
+    }.bind()
+    CcTalkStatus.Ok
   }
 
-  suspend fun payout(coins: Int): CcTalkStatus {
-    if (coins !in 1..255) return CcTalkStatus.WrongParameter
-    if (multiCoin) return CcTalkStatus.UnSupported
+  suspend fun payout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
+    if (coins !in 1..255) raise(CcTalkError.WrongParameterError("coins must be between 1 and 255, got: $coins"))
+    if (multiCoin) raise(CcTalkError.UnsupportedError("payout is not supported in multi coin mode"))
 
-    return when (payoutMode) {
-      PayoutMode.SerialNumber -> handleSerialNumberPayout(coins)
-      PayoutMode.NoEncryption -> handleNoEncryptionPayout(coins)
-      PayoutMode.Encrypted -> CcTalkStatus.UnSupported
+    when (payoutMode) {
+      PayoutMode.SerialNumber -> handleSerialNumberPayout(coins).bind()
+      PayoutMode.NoEncryption -> handleNoEncryptionPayout(coins).bind()
+      PayoutMode.Encrypted -> raise(CcTalkError.UnsupportedError("encrypted payout is not supported"))
     }
+    CcTalkStatus.Ok
   }
 
-  private suspend fun handleSerialNumberPayout(coins: Int): CcTalkStatus {
-    return talkCc { header(242u) }
-      .fold(
-        { return it },
-        {
-          if (it.dataLength.toInt() < 3) {
-            return CcTalkStatus.DataFormat
-          }
-
-          val payload = ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte())
-          return talkCc { header(167u); data(payload) }
-            .fold(
-              { return it },
-              { return CcTalkStatus.Ok }
-            )
-        }
-      )
+  private suspend fun handleSerialNumberPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
+    talkCc { header(242u) }
+      .bind()
+      .let {
+        ensure(it.dataLength.toInt() >= 3) { CcTalkError.DataLengthError(3, 255, it.dataLength.toInt()) }
+        talkCc { header(167u); data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte())) }.bind()
+      }
+    CcTalkStatus.Ok
   }
 
-  private suspend fun handleNoEncryptionPayout(coins: Int): CcTalkStatus {
-    val pumpRngEither = talkCc { header(161u); data(UByteArray(8) { 0u }) }
-    if (pumpRngEither.isLeft()) return pumpRngEither.leftOrNull()!!
-    val requestCipherKey = talkCc { header(160u) }
-    if (requestCipherKey.isLeft()) return requestCipherKey.leftOrNull()!!
-    val payout = talkCc { header(167u); data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() }) }
-    if (payout.isLeft()) return payout.leftOrNull()!!
-    return CcTalkStatus.Ok
+  private suspend fun handleNoEncryptionPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
+    // Pump RNG
+    talkCc { header(161u); data(UByteArray(8) { 0u }) }.bind()
+    // Request Cipher Key
+    talkCc { header(160u) }.bind()
+    // Payout
+    talkCc { header(167u); data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() }) }.bind()
+    CcTalkStatus.Ok
   }
 
-  suspend fun emergencyStop(): Either<CcTalkStatus, Int> {
-    return talkCc { header(172u) }
-      .fold(
-        { return it.left() },
-        { return if (it.dataLength.toInt() > 0) it.data[0].toInt().right() else 0.right() }
-      )
+  suspend fun emergencyStop(): Either<CcTalkError, Int> = either {
+    val stop = talkCc { header(165u) }.bind()
+    if (stop.dataLength.toInt() > 0) stop.data[0].toInt() else 0
   }
 
-  suspend fun purge(): CcTalkStatus {
-    if (multiCoin) return CcTalkStatus.UnSupported
+  suspend fun purge(): Either<CcTalkError, CcTalkStatus> = either {
+    if (multiCoin) raise(CcTalkError.UnsupportedError("purge is not supported in multi coin mode"))
 
-    return talkCc {
+    talkCc {
       header(121u)
       data(ubyteArrayOf(0u))
-    }.fold(
-      { return it },
-      { return CcTalkStatus.Ok }
-    )
+    }.bind().let { CcTalkStatus.Ok }
   }
 
-  suspend fun getAllHopperCoinValue(ignoreCache: Boolean = false): Either<CcTalkStatus, List<CoinValue>> {
+  suspend fun getAllHopperCoinValue(ignoreCache: Boolean = false): Either<CcTalkError, List<CoinValue>> = either {
     if (coinValues.isNotEmpty() && !ignoreCache) {
-      return Either.Right(coinValues)
+      return coinValues.right()
     }
 
     coinTypes = 0
     coinValues.clear()
     for (i in 0 until 16) {
-      val result = getHopperCoinValue(i).fold(
-        { return it.left() },
-        {
-          coinValues.add(it)
-          coinTypes++
-          return CcTalkStatus.Ok.left()
-        }
-      )
-      if (result != CcTalkStatus.Ok.left()) {
-        return result.left()
-      }
+      coinValues.add(getHopperCoinValue(i).bind())
+      coinTypes++
     }
     multiCoin = coinTypes > 1
-    return coinValues.right()
+    coinValues
   }
 
-  suspend fun getHopperCoinValue(coinNumber: Int): Either<CcTalkStatus, CoinValue> {
-    return getHopperCoinId(coinNumber)
-      .fold(
-        { Either.Left(it) },
-        {
-          if (it.name.length < 6) {
-            return Either.Left(CcTalkStatus.DataFormat)
-          }
-
-          val id = it.name.substring(0, 2)
-          var factorChar = ' '
-          val valueString = buildString {
-            for (i in 2 until 5) {
-              val currentChar = it.name[i]
-              if (currentChar.isDigit()) {
-                append(currentChar)
-              } else {
-                append('.')
-                factorChar = currentChar
-              }
-            }
-          }
-
-          val currency = Currency.Search.byCcTalkID(id)
-          if (currency == null) {
-            return Either.Left(CcTalkStatus.DataFormat)
-          }
-
-          val coinValue = try {
-            valueString.toDouble() / 10.0.pow(currency.decimals.toDouble())
-          } catch (e: NumberFormatException) {
-            return Either.Left(CcTalkStatus.DataFormat)
-          }
-
-          val factor = ValueFactor.fromChar(factorChar) ?: ValueFactor(' ', 1.0)
-          return Either.Right(CoinValue(it.id, coinValue * factor.face, currency.decimals))
-        }
-      )
-  }
-
-  suspend fun getHopperCoinId(coinNumber: Int): Either<CcTalkStatus, CoinId> {
-    if (coinNumber !in 0..15) {
-      return Either.Left(CcTalkStatus.WrongParameter)
+  suspend fun getHopperCoinValue(coinNumber: Int): Either<CcTalkError, CoinValue> = either {
+    var coinId = getHopperCoinId(coinNumber).bind()
+    ensure(coinId.name.length >= 6) {
+      CcTalkError.PayloadError("coin name should be at least 6 char, got: ${coinId.name.length}")
     }
 
-    return talkCc {
+    val id = coinId.name.substring(0, 2)
+    var factorChar = ' '
+    val valueString = buildString {
+      for (i in 2 until 5) {
+        val currentChar = coinId.name[i]
+        if (currentChar.isDigit()) append(currentChar)
+        else {
+          append('.')
+          factorChar = currentChar
+        }
+      }
+    }
+
+    val currency = Currency.Search.byCcTalkID(id) ?: raise(CcTalkError.PayloadError("unknown currency: $id"))
+    val coinValue = try {
+      valueString.toDouble() / 10.0.pow(currency.decimals.toDouble())
+    } catch (e: NumberFormatException) {
+      raise(CcTalkError.PayloadError("invalid coin value: $valueString"))
+    }
+
+    val factor = ValueFactor.fromChar(factorChar) ?: ValueFactor(' ', 1.0)
+    CoinValue(coinId.id, coinValue * factor.face, currency.decimals)
+  }
+
+  suspend fun getHopperCoinId(coinNumber: Int): Either<CcTalkError, CoinId> = either {
+    if (coinNumber !in 0..15)
+      raise(CcTalkError.WrongParameterError("coinNumber must be between 0 and 15, got: $coinNumber"))
+
+    talkCc {
       header(131u)
       destination(address.toUByte())
       source(CcTalkCommand.SOURCE_ADDRESS)
       data(ubyteArrayOf((coinNumber + 1).toUByte()))
       checksumType(checksumType)
-    }.fold(
-      { error -> Either.Left(error) },
-      {
+    }.bind()
+      .let {
         val dataLength = it.dataLength.toInt()
-        if (dataLength < 8) return Either.Left(CcTalkStatus.DataFormat)
+        if (dataLength < 8) raise(CcTalkError.DataFormatError(8, dataLength))
 
         val coinName = buildString {
           it.data
@@ -329,8 +268,7 @@ class PayoutDevice(
             .forEach { append(it) }
         }
         val coinId = it.data[dataLength - 2] + 256u * it.data[dataLength - 1]
-        return Either.Right(CoinId(coinId.toString(), coinName.toString()))
+        CoinId(coinId.toString(), coinName.toString())
       }
-    )
   }
 }

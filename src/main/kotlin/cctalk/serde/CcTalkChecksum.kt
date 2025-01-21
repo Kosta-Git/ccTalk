@@ -4,6 +4,11 @@ import be.inotek.communication.CcTalkChecksumTypes.CRC16
 import be.inotek.communication.CcTalkChecksumTypes.Simple8
 import be.inotek.communication.packet.CcTalkPacket
 
+fun CcTalkPacket.getCheckSum() = when (checksumType) {
+  Simple8 -> computeSimple8Checksum()
+  CRC16 -> computeCrc16Checksum()
+}
+
 fun CcTalkPacket.setCheckSum() = when (checksumType) {
   Simple8 -> setSimple8Checksum()
   CRC16 -> setCrc16Checksum()

@@ -1,12 +1,12 @@
 package cctalk.packet
 
 import arrow.core.Either
-import cctalk.serial.ConcurrentSerialPort.SerialError
+import cctalk.CcTalkError
 import kotlinx.coroutines.CompletableDeferred
 
 data class PacketRequest(
   val data: ByteArray,
-  val response: CompletableDeferred<Either<SerialError, ByteArray>>
+  val response: CompletableDeferred<Either<CcTalkError, ByteArray>>
 ) {
   override fun equals(other: Any?): Boolean {
     if (this === other) return true

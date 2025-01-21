@@ -1,9 +1,12 @@
 package cctalk.serde
 
 import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.right
 import be.inotek.communication.CcTalkChecksumTypes
 import be.inotek.communication.packet.CcTalkPacket
 import be.inotek.communication.packet.MAX_BLOCK_LENGTH
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 
 data class CcTalkSerializationResult(val data: ByteArray, val size: Int) {
@@ -32,7 +35,7 @@ interface CcTalkSerializer {
     data: ByteArray,
     checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8,
     verifyChecksum: Boolean = true
-  ): Either<CcTalkStatus, CcTalkPacket>
+  ): Either<CcTalkError, CcTalkPacket>
 }
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -54,10 +57,10 @@ class CcTalkSerializerImpl : CcTalkSerializer {
     data: ByteArray,
     checksumType: CcTalkChecksumTypes,
     verifyChecksum: Boolean
-  ): Either<CcTalkStatus, CcTalkPacket> {
-    if(data.size < 5 || data.size > MAX_BLOCK_LENGTH) return Either.Left(CcTalkStatus.DataLen)
+  ): Either<CcTalkError, CcTalkPacket> = either {
+    if(data.size < 5 || data.size > MAX_BLOCK_LENGTH) raise(CcTalkError.DataLengthError(5, MAX_BLOCK_LENGTH, data.size))
     val packet = CcTalkPacket(UByteArray(data.size) { i -> data[i].toUByte() }, checksumType)
-    if (verifyChecksum && !packet.isChecksumValid()) return Either.Left(CcTalkStatus.ChSumErr)
-    return Either.Right(packet)
+    if (verifyChecksum && !packet.isChecksumValid()) raise(CcTalkError.ChecksumError())
+    packet
   }
 }

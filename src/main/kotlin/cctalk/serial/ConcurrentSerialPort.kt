@@ -3,10 +3,9 @@ package cctalk.serial
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
+import cctalk.CcTalkError
 import com.fazecast.jSerialComm.SerialPort
-import cctalk.CcTalkStatus
 import cctalk.packet.PacketRequest
-import cctalk.serial.ConcurrentSerialPort.SerialError
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.atomic.AtomicBoolean
@@ -22,7 +21,7 @@ const val MAX_BLOCK_LENGTH = 64
 interface ConcurrentPort {
   fun open(): Boolean
   fun close(): Unit
-  suspend fun sendPacket(packet: ByteArray): Either<SerialError, ByteArray>
+  suspend fun sendPacket(packet: ByteArray): Either<CcTalkError, ByteArray>
 }
 
 class ConcurrentSerialPort(
@@ -68,9 +67,9 @@ class ConcurrentSerialPort(
     }
   }
 
-  private suspend fun sendPacketInternal(payload: ByteArray): Either<SerialError, ByteArray> = either {
-    with(port) {
-      if (!isOpen) raise(SerialError.PortError("Port is not open"))
+  private suspend fun sendPacketInternal(payload: ByteArray): Either<CcTalkError, ByteArray> = either {
+    return with(port) {
+      if (!isOpen) raise(CcTalkError.PortError(this.systemPortName ?: "Unknown port"))
 
       clearDTR()
       clearRTS()
@@ -80,11 +79,11 @@ class ConcurrentSerialPort(
 
       lastCommunicationTime = System.currentTimeMillis()
       var written = writeBytes(payload, payload.size)
-      if (written != payload.size) raise(SerialError.WriteError("Failed to write all bytes"))
+      if (written != payload.size) raise(CcTalkError.WriteError("Failed to write all bytes"))
 
       if (localEcho) {
         val echo = readBytes(ByteArray(payload.size), payload.size)
-        if (echo != payload.size) raise(SerialError.CommunicationError("Local echo does not match"))
+        if (echo != payload.size) raise(CcTalkError.CommunicationError("Local echo does not match"))
       }
 
       val buffer = mutableListOf<Byte>()
@@ -94,7 +93,7 @@ class ConcurrentSerialPort(
       while (true) {
         if (System.currentTimeMillis() - startTime > timeOut) {
           lastCommunicationTime = System.currentTimeMillis()
-          raise(SerialError.TimeoutError("Timeout while waiting for response"))
+          raise(CcTalkError.TimeoutError())
         }
 
         val available = bytesAvailable()
@@ -123,8 +122,8 @@ class ConcurrentSerialPort(
     if (time > 0) delay(time)
   }
 
-  override suspend fun sendPacket(packet: ByteArray): Either<SerialError, ByteArray> {
-    val response = CompletableDeferred<Either<SerialError, ByteArray>>()
+  override suspend fun sendPacket(packet: ByteArray): Either<CcTalkError, ByteArray> {
+    val response = CompletableDeferred<Either<CcTalkError, ByteArray>>()
     val request = PacketRequest(packet, response)
     sendQueue.send(request)
     return response.await()
@@ -147,13 +146,5 @@ class ConcurrentSerialPort(
   override fun close() {
     scope.cancel()
     port.closePort()
-  }
-
-  sealed class SerialError(val status: CcTalkStatus = CcTalkStatus.Unknown) {
-    data class PortError(val message: String) : SerialError(CcTalkStatus.BadLine)
-    data class TimeoutError(val message: String) : SerialError(CcTalkStatus.RcvTimeout)
-    data class CommunicationError(val message: String) : SerialError(CcTalkStatus.CommError)
-    data class WriteError(val message: String) : SerialError(CcTalkStatus.Unknown)
-    data class ReadError(val message: String) : SerialError(CcTalkStatus.Unknown)
   }
 }
