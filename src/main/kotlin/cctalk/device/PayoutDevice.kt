@@ -168,11 +168,16 @@ class PayoutDevice(
   }
 
   private suspend fun handleSerialNumberPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
+    // Request Serial number
     talkCc { header(242u) }
       .bind()
       .let {
         ensure(it.dataLength.toInt() >= 3) { CcTalkError.DataLengthError(3, 255, it.dataLength.toInt()) }
-        talkCc { header(167u); data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte())) }.bind()
+        talkCc {
+          // Payout with serial number
+          header(167u)
+          data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte()))
+        }.bind()
       }
     CcTalkStatus.Ok
   }
