@@ -10,6 +10,17 @@ import cctalk.CcTalkStatus
 import cctalk.currency.CoinValue
 import cctalk.currency.Currency
 import cctalk.currency.ValueFactor
+import cctalk.device.CcTalkDevice.CcTalkCommand.HOPPER_ENABLE
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_CIPHER_KEY
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_COIN_ID
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_DISPENSE
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_EMERGENCY_STOP
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_LEVEL_STATUS
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_PUMP_RNG
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_PURGE
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_STATUS
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_HOPPER_TEST
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_SERIAL_NUMBER
 import cctalk.payout.*
 import cctalk.serial.CcTalkPort
 import java.util.*
@@ -61,9 +72,8 @@ class PayoutDevice(
 
     // Retrieve event data
     val eventsData = talkCc {
-      header(166u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_HOPPER_STATUS)
+      withDefaults(this@PayoutDevice)
     }.bind()
     ensure(eventsData.dataLength.toInt() >= 4) { CcTalkError.DataFormatError(4, eventsData.dataLength.toInt()) }
     if (eventsData.data[0].toInt() == 0) statuses.add(PayoutStatusFlag.Reset)
@@ -87,8 +97,7 @@ class PayoutDevice(
     // It's getting the event data but differently???
     val status = talkCc {
       header(133u)
-      destination(address)
-      checksumType(checksumType)
+      withDefaults(this@PayoutDevice)
     }.bind()
     val dataLength = status.dataLength.toInt()
     ensure(dataLength >= 3) { CcTalkError.DataFormatError(3, dataLength) }
@@ -126,9 +135,8 @@ class PayoutDevice(
 
   private suspend fun getHopperSensors(): Either<CcTalkError, HopperSensorLevels> = either {
     val levelSensor = talkCc {
-      header(217u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_HOPPER_LEVEL_STATUS)
+      withDefaults(this@PayoutDevice)
     }.bind()
     ensure(levelSensor.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, levelSensor.dataLength.toInt()) }
 
@@ -138,6 +146,7 @@ class PayoutDevice(
     )
   }
 
+  // TODO: The flags do not look correct
   private fun computeSensorStatus(value: UByte, isHighLevel: Boolean): PayoutSensorStatus {
     val supportedFlag = if (isHighLevel) 0x20 else 0x10
     val isTriggeredFlag = if (isHighLevel) 0x02 else 0x01
@@ -148,9 +157,8 @@ class PayoutDevice(
 
   private suspend fun getHopperStatusTest(): Either<CcTalkError, EnumSet<PayoutStatusFlag>> = either {
     val packet = talkCc {
-      header(163u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_HOPPER_TEST)
+      withDefaults(this@PayoutDevice)
     }.bind()
     ensure(packet.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, packet.dataLength.toInt()) }
 
@@ -165,10 +173,9 @@ class PayoutDevice(
 
   suspend fun setPayoutEnabled(enabled: Boolean):  Either<CcTalkError, CcTalkStatus> = either {
     talkCc {
-      header(164u)
-      data(ubyteArrayOf(if (enabled) 165u else 0u))
-      destination(address)
-      checksumType(checksumType)
+      header(HOPPER_ENABLE)
+      data(ubyteArrayOf(if (enabled) 0xA5u else 0u))
+      withDefaults(this@PayoutDevice)
     }.bind()
     CcTalkStatus.Ok
   }
@@ -188,19 +195,17 @@ class PayoutDevice(
   private suspend fun handleSerialNumberPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
     // Request Serial number
     talkCc {
-      header(242u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_SERIAL_NUMBER)
+      withDefaults(this@PayoutDevice)
     }
       .bind()
       .let {
         ensure(it.dataLength.toInt() >= 3) { CcTalkError.DataLengthError(3, 255, it.dataLength.toInt()) }
         talkCc {
           // Payout with serial number
-          header(167u)
+          header(REQUEST_HOPPER_DISPENSE)
           data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte()))
-          destination(address)
-          checksumType(checksumType)
+          withDefaults(this@PayoutDevice)
         }.bind()
       }
     CcTalkStatus.Ok
@@ -209,32 +214,28 @@ class PayoutDevice(
   private suspend fun handleNoEncryptionPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
     // Pump RNG
     talkCc {
-      header(161u)
+      header(REQUEST_HOPPER_PUMP_RNG)
       data(UByteArray(8) { 0u })
-      destination(address)
-      checksumType(checksumType)
+      withDefaults(this@PayoutDevice)
     }.bind()
     // Request Cipher Key
     talkCc {
-      header(160u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_HOPPER_CIPHER_KEY)
+      withDefaults(this@PayoutDevice)
     }.bind()
     // Payout
     talkCc {
-      header(167u)
+      header(REQUEST_HOPPER_DISPENSE)
       data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() })
-      destination(address)
-      checksumType(checksumType)
+      withDefaults(this@PayoutDevice)
     }.bind()
     CcTalkStatus.Ok
   }
 
   suspend fun emergencyStop(): Either<CcTalkError, Int> = either {
     val stop = talkCc {
-      header(165u)
-      destination(address)
-      checksumType(checksumType)
+      header(REQUEST_HOPPER_EMERGENCY_STOP)
+      withDefaults(this@PayoutDevice)
     }.bind()
     if (stop.dataLength.toInt() > 0) stop.data[0].toInt() else 0
   }
@@ -243,10 +244,9 @@ class PayoutDevice(
     if (multiCoin) raise(CcTalkError.UnsupportedError("purge is not supported in multi coin mode"))
 
     talkCc {
-      header(121u)
+      header(REQUEST_HOPPER_PURGE)
       data(ubyteArrayOf(0u))
-      destination(address)
-      checksumType(checksumType)
+      withDefaults(this@PayoutDevice)
     }.bind().let { CcTalkStatus.Ok }
   }
 
@@ -300,11 +300,9 @@ class PayoutDevice(
       raise(CcTalkError.WrongParameterError("coinNumber must be between 0 and 15, got: $coinNumber"))
 
     talkCc {
-      header(131u)
-      destination(address.toUByte())
-      source(CcTalkCommand.SOURCE_ADDRESS)
+      header(REQUEST_HOPPER_COIN_ID)
       data(ubyteArrayOf((coinNumber + 1).toUByte()))
-      checksumType(checksumType)
+      withDefaults(this@PayoutDevice)
     }.bind()
       .let {
         val dataLength = it.dataLength.toInt()

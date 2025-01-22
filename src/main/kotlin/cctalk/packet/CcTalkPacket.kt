@@ -115,6 +115,11 @@ class CcTalkPacketBuilder {
   fun data(value: UByteArray) = apply { data = value }
   fun checksum(value: UByte) = apply { checksum = value }
   fun checksumType(value: CcTalkChecksumTypes) = apply { checksumType = value }
+  fun withDefaults(device: CcTalkDevice) = apply {
+    destination = device.address.toUByte()
+    source = CcTalkDevice.CcTalkCommand.SOURCE_ADDRESS
+    checksumType = device.checksumType
+  }
 
   fun build(): CcTalkPacket {
     val packet = CcTalkPacket(

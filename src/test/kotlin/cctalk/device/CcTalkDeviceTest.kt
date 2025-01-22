@@ -1,6 +1,7 @@
 package cctalk.device
 
 import be.inotek.communication.CcTalkChecksumTypes
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -12,7 +13,7 @@ class CcTalkDeviceTest {
   fun `deviceCategory should return correct category`() = runBlocking {
     // Arrange
     val responses = mapOf(
-      248.toUByte() to TestCcTalkPort.createStringResponse("Coin Acceptor")
+      245.toUByte() to TestCcTalkPort.createStringResponse("Coin Acceptor")
     )
     val testPort = TestCcTalkPort(
       deviceAddress = 2u,
@@ -25,7 +26,7 @@ class CcTalkDeviceTest {
     )
 
     // Act
-    val result = device.deviceCategory()
+    val result = device.equipmentCategoryId()
 
     // Assert
     assertTrue(result.isRight())
@@ -35,7 +36,7 @@ class CcTalkDeviceTest {
     val sentPacket = testPort.lastPacketSent!!
     assertEquals(2u, sentPacket.destination)
     assertEquals(1u, sentPacket.source)
-    assertEquals(248u, sentPacket.header)
+    assertEquals(245u, sentPacket.header)
   }
 
   @Test
@@ -58,7 +59,7 @@ class CcTalkDeviceTest {
     val result = device.simplePoll()
 
     // Assert
-    assertEquals(CcTalkStatus.Ok, result)
+    assertEquals(CcTalkStatus.Ok, result.getOrNull()!!)
 
     // Verify correct packet was sent
     val sentPacket = testPort.lastPacketSent!!
@@ -72,7 +73,7 @@ class CcTalkDeviceTest {
     // Arrange
     val testPort = TestCcTalkPort(
       deviceAddress = 2u,
-      forcedError = CcTalkStatus.SendErr
+      forcedError = CcTalkError.SendError()
     )
     val device = CcTalkDevice(
       port = testPort,
@@ -84,7 +85,7 @@ class CcTalkDeviceTest {
     val result = device.simplePoll()
 
     // Assert
-    assertEquals(CcTalkStatus.SendErr, result)
+    assertEquals(CcTalkStatus.SendErr, result.leftOrNull()?.status!!)
   }
 
   @Test
@@ -100,10 +101,10 @@ class CcTalkDeviceTest {
     // Act
     device.simplePoll()
     device.simplePoll()
-    device.deviceCategory()
+    device.equipmentCategoryId()
 
     // Assert
     assertEquals(2, testPort.getHeaderCallCount(254u)) // simplePoll called twice
-    assertEquals(1, testPort.getHeaderCallCount(248u)) // deviceCategory called once
+    assertEquals(1, testPort.getHeaderCallCount(245u)) // deviceCategory called once
   }
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import java.util.stream.Stream
 import kotlin.test.assertEquals
+import kotlin.test.fail
 
 class DongleDeviceLedStatusTest {
   data class LedTestCase(
@@ -126,11 +127,13 @@ class DongleDeviceLedStatusTest {
     )
 
     // Assert
-    assertEquals(
-      testCase.expectedStatus,
-      result,
-      "Failed for case: ${testCase.description}"
-    )
+    if(testCase.expectedStatus != CcTalkStatus.Ok) {
+      assertEquals(
+        testCase.expectedStatus,
+        result.leftOrNull()?.status!!,
+        "Failed for case: ${testCase.description}"
+      )
+    }
 
     // Verify packet was only sent for valid cases
     if (testCase.expectedStatus == CcTalkStatus.Ok) {

@@ -3,6 +3,7 @@ package cctalk.serial
 import arrow.core.Either
 import be.inotek.communication.CcTalkChecksumTypes
 import be.inotek.communication.packet.CcTalkPacket
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.serde.CcTalkSerializer
 import cctalk.serde.CcTalkSerializationResult
@@ -51,7 +52,7 @@ class CcTalkPortImpTest {
     val result = ccTalkPort.talkCcNoResponse(packet)
 
     // Assert
-    assertEquals(CcTalkStatus.Ok, result)
+    assertEquals(CcTalkStatus.Ok, result.getOrNull()!!)
     coVerify {
       serializer.serialize(packet)
       port.sendPacket(serializedData)
@@ -72,13 +73,13 @@ class CcTalkPortImpTest {
     val serializationResult = CcTalkSerializationResult(serializedData, 5)
 
     coEvery { serializer.serialize(packet) } returns serializationResult
-    coEvery { port.sendPacket(serializedData) } returns Either.Left(ConcurrentSerialPort.SerialError.TimeoutError(""))
+    coEvery { port.sendPacket(serializedData) } returns Either.Left(CcTalkError.TimeoutError())
 
     // Act
     val result = ccTalkPort.talkCcNoResponse(packet)
 
     // Assert
-    assertEquals(CcTalkStatus.RcvTimeout, result)
+    assertEquals(CcTalkStatus.RcvTimeout, result.leftOrNull()?.status!!)
     coVerify {
       serializer.serialize(packet)
       port.sendPacket(serializedData)
@@ -213,14 +214,14 @@ class CcTalkPortImpTest {
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Left(CcTalkStatus.ChSumErr)
+    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Left(CcTalkError.ChecksumError())
 
     // Act
     val result = ccTalkPort.talkCc(packet)
 
     // Assert
     assertTrue(result.isLeft())
-    assertEquals(CcTalkStatus.ChSumErr, result.swap().getOrNull())
+    assertEquals(CcTalkStatus.ChSumErr, result.leftOrNull()?.status!!)
     coVerify {
       serializer.serialize(packet)
       port.sendPacket(serializedData)

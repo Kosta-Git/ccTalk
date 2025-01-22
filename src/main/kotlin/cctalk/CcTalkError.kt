@@ -36,4 +36,6 @@ sealed class CcTalkError(
   class WriteError(message: String) : CcTalkError(message, CcTalkStatus.SendErr)
 
   class UnsupportedError(message: String) : CcTalkError(message, CcTalkStatus.UnSupported)
+
+  class SendError(message: String = "unable to send") : CcTalkError(message, CcTalkStatus.SendErr)
 }

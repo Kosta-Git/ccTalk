@@ -1,16 +1,19 @@
 package cctalk.device
 
 import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import be.inotek.communication.packet.CcTalkPacket
 import be.inotek.communication.packet.CcTalkPacketBuilder
+import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.serial.CcTalkPort
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class TestCcTalkPort(
   private val deviceAddress: UByte = 2u,
-  private val responses: Map<UByte, (CcTalkPacket) -> Either<CcTalkStatus, CcTalkPacket>> = emptyMap(),
-  private var forcedError: CcTalkStatus? = null
+  private val responses: Map<UByte, (CcTalkPacket) -> Either<CcTalkError, CcTalkPacket>> = emptyMap(),
+  private var forcedError: CcTalkError? = null
 ) : CcTalkPort {
 
   // Track the last packet sent for verification in tests
@@ -22,36 +25,36 @@ class TestCcTalkPort(
 
   fun getHeaderCallCount(header: UByte): Int = headerCallCounts[header] ?: 0
 
-  override suspend fun talkCcNoResponse(packet: CcTalkPacketBuilder.() -> Unit): CcTalkStatus =
+  override suspend fun talkCcNoResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, CcTalkStatus> =
     talkCcNoResponse(CcTalkPacket.build(packet))
 
-  override suspend fun talkCcNoResponse(packet: CcTalkPacket): CcTalkStatus =
+  override suspend fun talkCcNoResponse(packet: CcTalkPacket): Either<CcTalkError, CcTalkStatus> =
     talkCc(packet)
       .fold(
-        { error -> error },
-        { response -> CcTalkStatus.Ok }
+        { error -> error.left() },
+        { response -> CcTalkStatus.Ok.right() }
       )
 
-  override suspend fun talkCcLongResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkStatus, Long> =
+  override suspend fun talkCcLongResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, Long> =
     talkCcLongResponse(CcTalkPacket.build(packet))
 
-  override suspend fun talkCcLongResponse(packet: CcTalkPacket): Either<CcTalkStatus, Long> =
+  override suspend fun talkCcLongResponse(packet: CcTalkPacket): Either<CcTalkError, Long> =
     talkCc(packet) { response ->
       response.data.sumOf { it.toLong() }
     }
 
-  override suspend fun talkCcLongResponseReversed(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkStatus, Long> =
+  override suspend fun talkCcLongResponseReversed(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, Long> =
     talkCcLongResponseReversed(CcTalkPacket.build(packet))
 
-  override suspend fun talkCcLongResponseReversed(packet: CcTalkPacket): Either<CcTalkStatus, Long> =
+  override suspend fun talkCcLongResponseReversed(packet: CcTalkPacket): Either<CcTalkError, Long> =
     talkCc(packet) { response ->
       response.data.reversed().sumOf { it.toLong() }
     }
 
-  override suspend fun talkCcStringResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkStatus, String> =
+  override suspend fun talkCcStringResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, String> =
     talkCcStringResponse(CcTalkPacket.build(packet))
 
-  override suspend fun talkCcStringResponse(packet: CcTalkPacket): Either<CcTalkStatus, String> =
+  override suspend fun talkCcStringResponse(packet: CcTalkPacket): Either<CcTalkError, String> =
     talkCc(packet) { response ->
       response.data
         .filter { it >= 0x1fu && it <= 0x80u }
@@ -59,10 +62,10 @@ class TestCcTalkPort(
         .joinToString("")
     }
 
-  override suspend fun talkCcStringResponseReverse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkStatus, String> =
+  override suspend fun talkCcStringResponseReverse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, String> =
     talkCcStringResponseReverse(CcTalkPacket.build(packet))
 
-  override suspend fun talkCcStringResponseReverse(packet: CcTalkPacket): Either<CcTalkStatus, String> =
+  override suspend fun talkCcStringResponseReverse(packet: CcTalkPacket): Either<CcTalkError, String> =
     talkCc(packet) { response ->
       response.data
         .reversed()
@@ -74,21 +77,21 @@ class TestCcTalkPort(
   override suspend fun <T> talkCc(
     packet: CcTalkPacketBuilder.() -> Unit,
     onSuccess: (CcTalkPacket) -> T
-  ): Either<CcTalkStatus, T> =
+  ): Either<CcTalkError, T> =
     talkCc(CcTalkPacket.build(packet))
       .map(onSuccess)
 
   override suspend fun <T> talkCc(
     packet: CcTalkPacket,
     onSuccess: (CcTalkPacket) -> T
-  ): Either<CcTalkStatus, T> =
+  ): Either<CcTalkError, T> =
     talkCc(packet)
       .map(onSuccess)
 
-  override suspend fun talkCc(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkStatus, CcTalkPacket> =
+  override suspend fun talkCc(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, CcTalkPacket> =
     talkCc(CcTalkPacket.build(packet))
 
-  override suspend fun talkCc(packet: CcTalkPacket): Either<CcTalkStatus, CcTalkPacket> {
+  override suspend fun talkCc(packet: CcTalkPacket): Either<CcTalkError, CcTalkPacket> {
     lastPacketSent = packet
     headerCallCounts[packet.header] = (headerCallCounts[packet.header] ?: 0) + 1
 
@@ -97,7 +100,7 @@ class TestCcTalkPort(
 
     // Check if packet is intended for this device
     if (packet.destination != deviceAddress) {
-      return Either.Left(CcTalkStatus.WrongAddr)
+      return Either.Left(CcTalkError.WrongParameterError("Packet not intended for this device"))
     }
 
     // Get response handler for this header
@@ -116,7 +119,7 @@ class TestCcTalkPort(
 
   companion object {
     // Helper function to create standard response data
-    fun createStringResponse(text: String): (CcTalkPacket) -> Either<CcTalkStatus, CcTalkPacket> = { packet ->
+    fun createStringResponse(text: String): (CcTalkPacket) -> Either<CcTalkError, CcTalkPacket> = { packet ->
       Either.Right(CcTalkPacket.build {
         destination(1u)
         source(packet.destination)
@@ -126,7 +129,7 @@ class TestCcTalkPort(
       })
     }
 
-    fun createLongResponse(value: Long): (CcTalkPacket) -> Either<CcTalkStatus, CcTalkPacket> = { packet ->
+    fun createLongResponse(value: Long): (CcTalkPacket) -> Either<CcTalkError, CcTalkPacket> = { packet ->
       Either.Right(CcTalkPacket.build {
         destination(1u)
         source(packet.destination)

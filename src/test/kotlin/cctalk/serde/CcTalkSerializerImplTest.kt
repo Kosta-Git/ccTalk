@@ -102,7 +102,7 @@ class CcTalkSerializerImplTest {
     // When/Then
     var deserialized = serializer.deserialize(data, CcTalkChecksumTypes.Simple8)
     assertTrue { deserialized.isLeft() }
-    assertTrue { deserialized.leftOrNull() == CcTalkStatus.DataLen }
+    assertTrue { deserialized.leftOrNull()?.status!! == CcTalkStatus.DataFormat }
   }
 
   @Test
@@ -113,7 +113,7 @@ class CcTalkSerializerImplTest {
     // When/Then
     var deserialized = serializer.deserialize(data, CcTalkChecksumTypes.Simple8)
     assertTrue { deserialized.isLeft() }
-    assertTrue { deserialized.leftOrNull() == CcTalkStatus.DataLen }
+    assertTrue { deserialized.leftOrNull()?.status!! == CcTalkStatus.DataFormat }
   }
 
   @Test
@@ -136,7 +136,7 @@ class CcTalkSerializerImplTest {
     // When/Then
     var deserialized = serializer.deserialize(data, CcTalkChecksumTypes.Simple8)
     assertTrue { deserialized.isLeft() }
-    assertTrue { deserialized.leftOrNull() == CcTalkStatus.ChSumErr }
+    assertTrue { deserialized.leftOrNull()?.status!! == CcTalkStatus.ChSumErr }
   }
 
   @Test

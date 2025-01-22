@@ -1,7 +1,7 @@
 package cctalk.serial
 
+import cctalk.CcTalkError
 import com.fazecast.jSerialComm.SerialPort
-import cctalk.serial.ConcurrentSerialPort.SerialError
 import io.mockk.MockKAnnotations
 import io.mockk.clearAllMocks
 import io.mockk.every
@@ -207,7 +207,7 @@ class ConcurrentSerialPortTest {
 
     // Act & Assert
     serialPort.sendPacket(testPacket).fold(
-      { assertEquals(SerialError.TimeoutError("Timeout while waiting for response"), it) },
+      { assertEquals(CcTalkError.TimeoutError().status, it.status) },
       { assertTrue(false) }
     )
   }

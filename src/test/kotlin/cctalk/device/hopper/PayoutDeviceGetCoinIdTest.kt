@@ -114,8 +114,8 @@ class PayoutDeviceGetCoinIdTest {
       is Either.Left -> {
         assertTrue(testCase.expectedResult is Either.Left)
         assertEquals(
-          (testCase.expectedResult as Either.Left).value,
-          result.value,
+          testCase.expectedResult.value,
+          result.value.status,
           "Expected error ${testCase.expectedResult.value} but got ${result.value}"
         )
       }

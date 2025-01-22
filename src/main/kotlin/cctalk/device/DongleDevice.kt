@@ -23,6 +23,7 @@ class DongleDevice(
       raise(CcTalkError.WrongParameterError("time must be between 50 and 12500, got: $time"))
 
     talkCcNoResponse {
+      withDefaults(this@DongleDevice)
       var payload = ByteArray(2)
       payload[0] = ledNumber.toByte()
       when (status) {
@@ -41,10 +42,7 @@ class DongleDevice(
           payload[1] = (time / 50).toByte()
         }
       }
-      destination(address)
-      source(CcTalkCommand.SOURCE_ADDRESS)
       data(payload.toUByteArray())
-      checksumType(checksumType)
     }.bind()
   }
 }
