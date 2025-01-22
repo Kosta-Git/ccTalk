@@ -1,6 +1,7 @@
 package be.inotek.communication.packet
 
 import be.inotek.communication.CcTalkChecksumTypes
+import cctalk.device.CcTalkDevice
 
 const val MAX_BLOCK_LENGTH = 255
 const val DESTINATION_OFFSET = 0
@@ -101,13 +102,14 @@ data class CcTalkPacket(
 @OptIn(ExperimentalUnsignedTypes::class)
 class CcTalkPacketBuilder {
   private var destination: UByte = 0u
-  private var source: UByte = 0u
+  private var source: UByte = CcTalkDevice.CcTalkCommand.SOURCE_ADDRESS
   private var header: UByte = 0u
   private var data: UByteArray = UByteArray(0)
   private var checksum: UByte = 0u
   private var checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
 
   fun destination(value: UByte) = apply { destination = value }
+  fun destination(value: Byte) = apply { destination = value.toUByte() }
   fun source(value: UByte) = apply { source = value }
   fun header(value: UByte) = apply { header = value }
   fun data(value: UByteArray) = apply { data = value }

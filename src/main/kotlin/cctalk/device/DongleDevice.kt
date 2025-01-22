@@ -7,7 +7,6 @@ import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.LedStatus
 import cctalk.has
-import cctalk.payout.has
 import cctalk.serial.CcTalkPort
 
 class DongleDevice(
@@ -42,7 +41,7 @@ class DongleDevice(
           payload[1] = (time / 50).toByte()
         }
       }
-      destination(address.toUByte())
+      destination(address)
       source(CcTalkCommand.SOURCE_ADDRESS)
       data(payload.toUByteArray())
       checksumType(checksumType)

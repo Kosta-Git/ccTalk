@@ -60,7 +60,11 @@ class PayoutDevice(
     getHopperStatusTest().bind().forEach { statuses::add }
 
     // Retrieve event data
-    val eventsData = talkCc { header(166u) }.bind()
+    val eventsData = talkCc {
+      header(166u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     ensure(eventsData.dataLength.toInt() >= 4) { CcTalkError.DataFormatError(4, eventsData.dataLength.toInt()) }
     if (eventsData.data[0].toInt() == 0) statuses.add(PayoutStatusFlag.Reset)
     val (events, remaining, lastPayout, lastUnpaid) = eventsData.data.map { it.toInt() }
@@ -81,7 +85,11 @@ class PayoutDevice(
 
   suspend fun whPayoutStatus(): Either<CcTalkError, WhPayoutStatus> = either {
     // It's getting the event data but differently???
-    val status = talkCc { header(133u) }.bind()
+    val status = talkCc {
+      header(133u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     val dataLength = status.dataLength.toInt()
     ensure(dataLength >= 3) { CcTalkError.DataFormatError(3, dataLength) }
 
@@ -117,7 +125,11 @@ class PayoutDevice(
   }
 
   private suspend fun getHopperSensors(): Either<CcTalkError, HopperSensorLevels> = either {
-    val levelSensor = talkCc { header(217u) }.bind()
+    val levelSensor = talkCc {
+      header(217u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     ensure(levelSensor.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, levelSensor.dataLength.toInt()) }
 
     HopperSensorLevels(
@@ -135,7 +147,11 @@ class PayoutDevice(
   }
 
   private suspend fun getHopperStatusTest(): Either<CcTalkError, EnumSet<PayoutStatusFlag>> = either {
-    val packet = talkCc { header(163u) }.bind()
+    val packet = talkCc {
+      header(163u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     ensure(packet.dataLength.toInt() >= 1) { CcTalkError.DataLengthError(1, 255, packet.dataLength.toInt()) }
 
     var statuses = EnumSet.noneOf<PayoutStatusFlag>(PayoutStatusFlag::class.java)
@@ -151,6 +167,8 @@ class PayoutDevice(
     talkCc {
       header(164u)
       data(ubyteArrayOf(if (enabled) 165u else 0u))
+      destination(address)
+      checksumType(checksumType)
     }.bind()
     CcTalkStatus.Ok
   }
@@ -169,7 +187,11 @@ class PayoutDevice(
 
   private suspend fun handleSerialNumberPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
     // Request Serial number
-    talkCc { header(242u) }
+    talkCc {
+      header(242u)
+      destination(address)
+      checksumType(checksumType)
+    }
       .bind()
       .let {
         ensure(it.dataLength.toInt() >= 3) { CcTalkError.DataLengthError(3, 255, it.dataLength.toInt()) }
@@ -177,6 +199,8 @@ class PayoutDevice(
           // Payout with serial number
           header(167u)
           data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte()))
+          destination(address)
+          checksumType(checksumType)
         }.bind()
       }
     CcTalkStatus.Ok
@@ -184,16 +208,34 @@ class PayoutDevice(
 
   private suspend fun handleNoEncryptionPayout(coins: Int): Either<CcTalkError, CcTalkStatus> = either {
     // Pump RNG
-    talkCc { header(161u); data(UByteArray(8) { 0u }) }.bind()
+    talkCc {
+      header(161u)
+      data(UByteArray(8) { 0u })
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     // Request Cipher Key
-    talkCc { header(160u) }.bind()
+    talkCc {
+      header(160u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     // Payout
-    talkCc { header(167u); data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() }) }.bind()
+    talkCc {
+      header(167u)
+      data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() })
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     CcTalkStatus.Ok
   }
 
   suspend fun emergencyStop(): Either<CcTalkError, Int> = either {
-    val stop = talkCc { header(165u) }.bind()
+    val stop = talkCc {
+      header(165u)
+      destination(address)
+      checksumType(checksumType)
+    }.bind()
     if (stop.dataLength.toInt() > 0) stop.data[0].toInt() else 0
   }
 
@@ -203,6 +245,8 @@ class PayoutDevice(
     talkCc {
       header(121u)
       data(ubyteArrayOf(0u))
+      destination(address)
+      checksumType(checksumType)
     }.bind().let { CcTalkStatus.Ok }
   }
 

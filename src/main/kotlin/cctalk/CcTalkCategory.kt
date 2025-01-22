@@ -69,5 +69,31 @@ enum class CcTalkCategory {
   /**
    * Bootloader device.
    */
-  Bootloader
+  Bootloader;
+
+  companion object Parse {
+    /**
+     * Parse category from device type.
+     *
+     * @param type Device type.
+     * @return Category.
+     */
+    fun from(type: String): CcTalkCategory {
+      return when (type.lowercase().replace(" ", "")) {
+        "coinselector" -> CoinSelector
+        "billvalidator" -> BillValidator
+        "cardreader" -> CardReader
+        "payout" -> PayOut
+        "coinscale" -> CoinScale
+        "peripheral" -> Peripheral
+        "changegiver" -> ChangeGiver
+        "changer" -> Changer
+        "coinfeeder" -> CoinFeeder
+        "cashless" -> Cashless
+        "escrowsorter" -> EscrowSorter
+        "bootloader" -> Bootloader
+        else -> Unknown
+      }
+    }
+  }
 }
