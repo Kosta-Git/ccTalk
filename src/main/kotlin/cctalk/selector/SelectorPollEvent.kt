@@ -1,4 +1,4 @@
-package cctalk
+package cctalk.selector
 
 enum class SelectorPollEvent(val code: Int) {
   /**
@@ -281,4 +281,30 @@ enum class SelectorPollEvent(val code: Int) {
    * A credited coin was possibly removed from the change giver.
    */
   CoinRemoved(646);
+
+  companion object {
+    fun fromCode(code: Int): SelectorPollEvent = SelectorPollEvent.entries.firstOrNull { it.code == code } ?: Unknown
+
+    val COIN_EVENTS: List<SelectorPollEvent> = listOf(
+      Coin,
+      CoinInhibit,
+      CoinInhibit00,
+      CoinInhibit01,
+      CoinInhibit02,
+      CoinInhibit03,
+      CoinInhibit04,
+      CoinInhibit05,
+      CoinInhibit06,
+      CoinInhibit07,
+      CoinInhibit08,
+      CoinInhibit09,
+      CoinInhibit10,
+      CoinInhibit11,
+      CoinInhibit12,
+      CoinInhibit13,
+      CoinInhibit14,
+      CoinInhibit15,
+      CoinReject,
+    )
+  }
 }

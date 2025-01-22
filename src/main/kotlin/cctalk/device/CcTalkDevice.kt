@@ -3,8 +3,6 @@ package cctalk.device
 import arrow.core.Either
 import arrow.core.raise.either
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacket
-import be.inotek.communication.packet.CcTalkPacketBuilder
 import cctalk.CcTalkCategory
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
@@ -41,6 +39,18 @@ open class CcTalkDevice(
     const val REQUEST_HOPPER_EMERGENCY_STOP: UByte = 172u
     const val REQUEST_HOPPER_PURGE: UByte = 121u
     const val REQUEST_HOPPER_COIN_ID: UByte = 131u
+
+    // Coin selector headers
+    const val SET_MASTER_INHIBIT: UByte = 228u
+    const val GET_MASTER_INHIBIT: UByte = 227u
+    const val SET_DEFAULT_SORTER_PATH: UByte = 189u
+    const val GET_DEFAULT_SORTER_PATH: UByte = 188u
+    const val SETUP_ESCROW_STATE: UByte = 240u
+    const val COIN_PRECISION: UByte = 100u
+    const val MODIFY_SORTER_OVERRIDE: UByte = 222u
+    const val MODIFY_SORTER_PATH: UByte = 210u
+    const val READ_BUFFERED_CREDIT: UByte = 229u
+    const val REQUEST_COIN_ID: UByte = 184u
 
   }
 
