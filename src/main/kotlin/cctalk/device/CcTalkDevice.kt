@@ -51,6 +51,11 @@ open class CcTalkDevice(
     const val MODIFY_SORTER_PATH: UByte = 210u
     const val READ_BUFFERED_CREDIT: UByte = 229u
     const val REQUEST_COIN_ID: UByte = 184u
+    const val REQUEST_SEL_INHIBIT_STATUS: UByte = 230u
+    const val REQUEST_SORTER_PATH: UByte = 209u
+    const val REQUEST_SORTER_OVERRIDE: UByte = 221u
+    const val PRE_COIN_INHIBIT_COMPAT: UByte = 179u
+    const val MODIFY_INHIBIT_STATUS: UByte = 231u
 
   }
 

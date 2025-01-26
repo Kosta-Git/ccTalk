@@ -350,157 +350,114 @@ class SelectorDevice(
    * @return List of [SelCoinStatus] if successful otherwise an error code.
    */
   suspend fun getCoinStates(): Either<CcTalkError, List<SelCoinStatus>> = either {
-    TODO()
+    val inhibitStatusFlags = talkCcLongResponse {
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.REQUEST_SEL_INHIBIT_STATUS)
+    }.bind()
+
+
+    (0..15)
+      .map { i -> 0x0001L shl i }
+      .mapIndexed { index: Int, mask: Long ->
+        SelCoinStatus(
+          inhibit = (inhibitStatusFlags and mask) != 0L,
+          overridePath = false,
+          sorterPath = getSorterPath(index).bind()
+        )
+      }
+      .toList()
   }
 
-  /*
+  suspend fun getSorterPath(coinNumber: Int): Either<CcTalkError, UByte> = either {
+    talkCc {
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.REQUEST_SORTER_PATH)
+      data(ubyteArrayOf((coinNumber + 1).toUByte()))
+    }.bind()
+      .let {
+        it.data.firstOrNull() ?: raise(CcTalkError.DataFormatError(1, 0))
+      }
+  }
 
-        /// <summary>
-        /// Retrieves the current inhibit status, sorter path and override status of the 16 coins.
-        /// </summary>
-        /// <param name="currvals">Array of <see cref="SelCoinStatus"/> - must have at least 16 elements.</param>
-        /// <returns>
-        /// <see cref="CcTalkErrors"/>.Ok if successful otherwise an error code.
-        /// </returns>
-        public CcTalkErrors GetCoinStates(ref SelCoinStatus[] currvals)
-        {
-            int i;
-            ushort inh, msk;
+  suspend fun getSorterOverride(): Either<CcTalkError, List<Boolean>> = either {
+    val sorterOverrides = talkCc {
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.REQUEST_SORTER_OVERRIDE)
+    }.bind()
 
-            if (currvals.Length < 16) return CcTalkErrors.WrongParameter;
+    if (sorterOverrides.dataLength.toInt() < 1) {
+      (0..8).map { i -> false }
+    } else {
+      (0..8).map { i -> ((0x01 shl i).toInt() and sorterOverrides.data[0].toInt()) == 0 }
+    }
+  }
 
-            inh = (ushort)GetLongResponse(230);
-            if (lasterr != CcTalkErrors.Ok) return lasterr;
-            //ovr = (ushort)GetLongResponse(221);
-            //if (lasterr != whCcTalkErrors.Ok) return lasterr;
+  /**
+   * Sets the override status of up to 8 paths.
+   * On power on override status for all paths is set to "false".
+   */
+  suspend fun setSorterOverride(overrides: List<Boolean>): Either<CcTalkError, CcTalkStatus> = either {
+    ensure(overrides.size >= 8) { CcTalkError.WrongParameterError("overrides should contain at least 8 elements.") }
 
-            msk = 0x0001;
-            for (i = 0; i < 16; i++)
-            {
-                currvals[i].Inhibit = (inh & msk) != 0;
-                currvals[i].Override = false; // (ovr & msk) == 0;
-                msk <<= 1;
-                currvals[i].SorterPath = GetSorterPath(i);
-                if (lasterr != CcTalkErrors.Ok) return lasterr;
-            }
-            return lasterr;
-        }
+    var mask: UByte = 0xFFu
+    for (i in 0 until 8.coerceAtMost(overrides.size)) {
+      val currentFlag = overrides[i]
+      if (currentFlag) mask = mask and (0x01u shl i).inv().toUByte()
+    }
 
-        /// <summary>
-        /// Retrieves override status for all sorter path.
-        /// </summary>
-        /// <param name="sorteroverrides">Array of bool, must have at least 8 elements.</param>
-        /// <returns>
-        /// <see cref="CcTalkErrors"/>.Ok if successful otherwise an error code.
-        /// </returns>
-        public CcTalkErrors GetSorterOverride(ref bool[] sorteroverrides)
-        {
-            CcTalkDataBlock sdta = new CcTalkDataBlock(cstype);
-            CcTalkDataBlock rdta = new CcTalkDataBlock(cstype);
+    talkCcNoResponse {
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.MODIFY_SORTER_OVERRIDE)
+      data(ubyteArrayOf(mask))
+    }.bind()
+  }
 
-            if (sorteroverrides.Length < 8) return CcTalkErrors.WrongParameter;
-            sdta.DataLength = 0;
-            sdta.Header = 221;
-            lasterr = TalkCc(sdta, ref rdta);
-            for (int i = 0; i < 8; i++)
-            {
-                if ((lasterr == CcTalkErrors.Ok) && (rdta.DataLength > 0))
-                    sorteroverrides[i] = (rdta.Data[0] & (0x01 << i)) == 0;
-                else
-                    sorteroverrides[i] = false;
-            }
-            return lasterr;
-        }
-        /// <summary>
-        /// Sets the override status of up to 8 paths.
-        /// </summary>
-        /// <remarks>
-        /// On power on override status for all paths is set to "false".
-        /// </remarks>
-        /// <param name="sorteroverrides">
-        /// Array of bool - must have at least 8 elements.
-        /// </param>
-        /// <returns>
-        /// <see cref="CcTalkErrors"/>.Ok if successful otherwise an error code.
-        /// </returns>
-        public CcTalkErrors SetSorterOverride(bool[] sorteroverrides)
-        {
-            CcTalkDataBlock sdta = new CcTalkDataBlock(cstype);
-            CcTalkDataBlock rdta = new CcTalkDataBlock(cstype);
+  /**
+   * Sets the inhibit status of the 16 coins.
+   * On power on all coins are inhibited.
+   * Use [getCoinValues] to identify available coin values and currencies
+   * and [getCoinStates] to determine current inhibit status.
+   * @param statuses Array of [SelCoinStatus] - must have at least 16 elements.
+   * Only then [SelCoinStatus.inhibit] field will be used.
+   * If it is set to true the coin will be enabled. This inconsistency is due to ccTalk terminology.
+   */
+  suspend fun setCoinInhibit(statuses: List<SelCoinStatus>): Either<CcTalkError, CcTalkStatus> = either {
+    ensure(statuses.size >= 16) { CcTalkError.WrongParameterError("statuses should contain at least 16 elements.") }
 
-            if (sorteroverrides.Length < 8) return CcTalkErrors.WrongParameter;
-            sdta.Data[0] = 0xff;
-            for (int i = 0; i < 8; i++)
-            {
-                if (sorteroverrides[i]) sdta.Data[0] = (byte)(sdta.Data[0] & ~(0x01 << i));
-            }
-            sdta.DataLength = 1;
-            sdta.Header = 222;
-            lasterr = TalkCc(sdta, ref rdta);
-            return lasterr;
-        }
+    var inhibit = 0x0000
+    var mask = 0x0001
+    for (i in 0 until 16) {
+      if (statuses[i].inhibit) inhibit = inhibit or mask
+      mask = mask shl 1
+    }
 
-        /// <summary>
-        /// Sets the inhibit status of the 16 coins.
-        /// </summary>
-        /// <remarks>
-        /// On power on all coins are inhibited.
-        /// Use <see cref="GetCoinValues"/> to identify available coin values and currencies
-        /// and <see cref="GetCoinStates"/> to determine current inhibit status.
-        /// </remarks>
-        /// <param name="currvals">
-        /// Array of <see cref="SelCoinStatus"/> - must have at least 16 elements.
-        /// Only then <see cref="SelCoinStatus.Inhibit"/> field will be used.
-        /// If it is set to true the coin will be enabled. This inconsistency is due to ccTalk terminology.
-        /// </param>
-        /// <returns>
-        /// <see cref="CcTalkErrors"/>.Ok if successful otherwise an error code.
-        /// </returns>
-        public CcTalkErrors SetCoinInhibit(SelCoinStatus[] currvals)
-        {
-            int i;
-            uint inh, msk;
-            CcTalkDataBlock sdta = new CcTalkDataBlock(cstype);
-            CcTalkDataBlock rdta = new CcTalkDataBlock(cstype);
+    talkCcNoResponse {
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.PRE_COIN_INHIBIT_COMPAT)
+      data(ubyteArrayOf(1u))
+    }.bind()
 
-            if (currvals.Length < 16) return CcTalkErrors.WrongParameter;
-            msk = 0x0001;
-            inh = 0x0000;
-            for (i = 0; i < 16; i++)
-            {
-                if (currvals[i].Inhibit) inh |= msk;
-                msk <<= 1;
-            }
-            sdta.DataLength = 0;        // für SR5 & Co.: Alle Bänke aktivieren.
-            sdta.Header = 179;
-            sdta.Data[0] = 1;
-            TalkCc(sdta, ref rdta);     // Fehler wird nicht beachtet.
+    talkCcNoResponse { // Set inhibit
+      withDefaults(this@SelectorDevice)
+      header(CcTalkCommand.MODIFY_INHIBIT_STATUS)
+      data(ubyteArrayOf(inhibit.toUByte(), (inhibit shr 8).toUByte()))
+    }.bind()
+  }
 
-            sdta.DataLength = 2;
-            sdta.Header = 231;
-            sdta.Data[0] = (byte)(inh & 0x00ff);
-            sdta.Data[1] = (byte)((inh >> 8) & 0x00ff);
-            lasterr = TalkCc(sdta, ref rdta);
-            return lasterr;
-        }
-        /// <summary>
-        /// Sets the same inhibit status for all 16 coins.
-        /// </summary>
-        /// <remarks>
-        /// On power on all coins are inhibited.
-        /// </remarks>
-        /// <param name="coinenable">
-        /// The status that will be set for all coins. If true all coins will be enabled.
-        /// </param>
-        /// <returns>
-        /// <see cref="CcTalkErrors"/>.Ok if successful otherwise an error code.
-        /// </returns>
-        public CcTalkErrors SetCoinInhibit(bool coinenable)
-        {
-            SelCoinStatus[] currvals = new SelCoinStatus[16];
-            for (int i = 0; i < 16; i++) currvals[i].Inhibit = coinenable;
-            return SetCoinInhibit(currvals);
-        }
-  *
-  * */
+  suspend fun setCoinInhibit(status: Boolean): Either<CcTalkError, CcTalkStatus> = either {
+    (0 until 16)
+      .map { SelCoinStatus(status, 0u, false) }
+      .toList()
+      .let {
+        setCoinInhibit(it).bind()
+      }
+  }
+
+  suspend fun setCoinInhibit(statuses: List<Boolean>): Either<CcTalkError, CcTalkStatus> = either {
+    statuses
+      .map { SelCoinStatus(it, 0u, false) }
+      .let {
+        setCoinInhibit(it).bind()
+      }
+  }
 }
