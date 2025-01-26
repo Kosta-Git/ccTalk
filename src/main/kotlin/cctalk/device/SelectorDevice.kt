@@ -444,18 +444,10 @@ class SelectorDevice(
     }.bind()
   }
 
-  suspend fun setCoinInhibit(status: Boolean): Either<CcTalkError, CcTalkStatus> = either {
+  suspend fun setAllCoinInhibit(status: Boolean): Either<CcTalkError, CcTalkStatus> = either {
     (0 until 16)
       .map { SelCoinStatus(status, 0u, false) }
       .toList()
-      .let {
-        setCoinInhibit(it).bind()
-      }
-  }
-
-  suspend fun setCoinInhibit(statuses: List<Boolean>): Either<CcTalkError, CcTalkStatus> = either {
-    statuses
-      .map { SelCoinStatus(it, 0u, false) }
       .let {
         setCoinInhibit(it).bind()
       }
