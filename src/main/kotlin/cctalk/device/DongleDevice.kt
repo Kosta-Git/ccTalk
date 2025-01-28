@@ -11,11 +11,10 @@ import cctalk.serial.CcTalkPort
 
 class DongleDevice(
   port: CcTalkPort,
-  address: Byte = 80,
+  address: Int = 80,
   checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
 ) : CcTalkDevice(port, address, checksumType) {
 
-  @OptIn(ExperimentalUnsignedTypes::class)
   suspend fun setLedState(ledNumber: Int, status: LedStatus, time: Int): Either<CcTalkError, CcTalkStatus> = either {
     if (ledNumber < 0 || ledNumber > 7)
       raise(CcTalkError.WrongParameterError("led number must be between 0 and 7, got: $ledNumber"))
@@ -28,21 +27,21 @@ class DongleDevice(
       payload[0] = ledNumber.toByte()
       when (status) {
         LedStatus.OFF -> {
-          header(107u)
+          header(107)
           payload[1] = 1
         }
 
         LedStatus.ON -> {
-          header(107u)
+          header(107)
           payload[1] = 0
         }
 
         LedStatus.BLINK -> {
-          header(108u)
+          header(108)
           payload[1] = (time / 50).toByte()
         }
       }
-      data(payload.toUByteArray())
+      data(payload)
     }.bind()
   }
 }

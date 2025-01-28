@@ -2,10 +2,10 @@ package cctalk.serial
 
 import arrow.core.Either
 import arrow.core.raise.either
-import be.inotek.communication.packet.CcTalkPacket
-import be.inotek.communication.packet.CcTalkPacketBuilder
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
+import cctalk.packet.CcTalkPacket
+import cctalk.packet.CcTalkPacketBuilder
 import cctalk.serde.CcTalkSerializer
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -31,7 +31,7 @@ interface CcTalkPort {
   suspend fun talkCc(packet: CcTalkPacket): Either<CcTalkError, CcTalkPacket>
 }
 
-class CcTalkPortImp(
+class CcTalkPortImpl(
   private val port: ConcurrentPort,
   private val serializer: CcTalkSerializer,
 ) : CcTalkPort {
@@ -74,7 +74,7 @@ class CcTalkPortImp(
     talkCc(packet)
       .bind()
       .data
-      .filter { it >= 0x1fu && it <= 0x80u }
+      .filter { it > 0x1f && it < 0x80 }
       .map { it.toInt().toChar() }
       .joinToString("", transform = { it.toString() })
   }
@@ -88,7 +88,7 @@ class CcTalkPortImp(
       .bind()
       .data
       .reversed()
-      .filter { it >= 0x1fu && it <= 0x80u }
+      .filter { it > 0x1f && it < 0x80 }
       .map { it.toInt().toChar() }
       .joinToString("", transform = { it.toString() })
   }

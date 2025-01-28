@@ -2,11 +2,11 @@ package cctalk.serial
 
 import arrow.core.Either
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacket
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
-import cctalk.serde.CcTalkSerializer
+import cctalk.packet.CcTalkPacket
 import cctalk.serde.CcTalkSerializationResult
+import cctalk.serde.CcTalkSerializer
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -16,18 +16,17 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class CcTalkPortImpTest {
 
   private lateinit var port: ConcurrentPort
   private lateinit var serializer: CcTalkSerializer
-  private lateinit var ccTalkPort: CcTalkPortImp
+  private lateinit var ccTalkPort: CcTalkPortImpl
 
   @BeforeEach
   fun setup() {
     port = mockk()
     serializer = mockk()
-    ccTalkPort = CcTalkPortImp(port, serializer)
+    ccTalkPort = CcTalkPortImpl(port, serializer)
   }
 
   @Test
@@ -42,11 +41,13 @@ class CcTalkPortImpTest {
     val serializedData = ByteArray(5)
     val serializationResult = CcTalkSerializationResult(serializedData, 5)
     val responseData = ByteArray(5)
-    val deserializedPacket = CcTalkPacket()
+    val deserializedPacket = CcTalkPacket(0, 0, 0, 0, IntArray(0), 0, CcTalkChecksumTypes.Simple8)
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(deserializedPacket)
+    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(
+      deserializedPacket
+    )
 
     // Act
     val result = ccTalkPort.talkCcNoResponse(packet)
@@ -93,7 +94,7 @@ class CcTalkPortImpTest {
       destination(2u)
       source(1u)
       header(0u)
-      data(ubyteArrayOf(1u, 2u, 3u))
+      data(byteArrayOf(1, 2, 3))
       checksumType(CcTalkChecksumTypes.Simple8)
     }
     val serializedData = ByteArray(8)
@@ -103,12 +104,14 @@ class CcTalkPortImpTest {
       destination(1u)
       source(2u)
       header(0u)
-      data(ubyteArrayOf(4u, 5u, 6u))
+      data(byteArrayOf(4, 5, 6))
     }
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(deserializedPacket)
+    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(
+      deserializedPacket
+    )
 
     // Act
     val result = ccTalkPort.talkCcLongResponse(packet)
@@ -130,7 +133,7 @@ class CcTalkPortImpTest {
       destination(2u)
       source(1u)
       header(0u)
-      data(ubyteArrayOf(72u, 101u, 108u, 108u, 111u)) // "Hello"
+      data(byteArrayOf(72, 101, 108, 108, 111)) // "Hello"
       checksumType(CcTalkChecksumTypes.Simple8)
     }
     val serializedData = ByteArray(10)
@@ -140,12 +143,14 @@ class CcTalkPortImpTest {
       destination(1u)
       source(2u)
       header(0u)
-      data(ubyteArrayOf(72u, 101u, 108u, 108u, 111u)) // "Hello"
+      data(byteArrayOf(72, 101, 108, 108, 111)) // "Hello"
     }
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(deserializedPacket)
+    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(
+      deserializedPacket
+    )
 
     // Act
     val result = ccTalkPort.talkCcStringResponse(packet)
@@ -167,7 +172,7 @@ class CcTalkPortImpTest {
       destination(2u)
       source(1u)
       header(0u)
-      data(ubyteArrayOf(1u, 2u, 3u))
+      data(byteArrayOf(1, 2, 3))
       checksumType(CcTalkChecksumTypes.Simple8)
     }
     val serializedData = ByteArray(8)
@@ -177,12 +182,14 @@ class CcTalkPortImpTest {
       destination(1u)
       source(2u)
       header(0u)
-      data(ubyteArrayOf(1u, 2u, 3u))
+      data(byteArrayOf(1, 2, 3))
     }
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(deserializedPacket)
+    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Right(
+      deserializedPacket
+    )
 
     // Act
     val result = ccTalkPort.talkCc(packet) { response ->
@@ -214,7 +221,12 @@ class CcTalkPortImpTest {
 
     coEvery { serializer.serialize(packet) } returns serializationResult
     coEvery { port.sendPacket(serializedData) } returns Either.Right(responseData)
-    coEvery { serializer.deserialize(responseData, CcTalkChecksumTypes.Simple8) } returns Either.Left(CcTalkError.ChecksumError())
+    coEvery {
+      serializer.deserialize(
+        responseData,
+        CcTalkChecksumTypes.Simple8
+      )
+    } returns Either.Left(CcTalkError.ChecksumError())
 
     // Act
     val result = ccTalkPort.talkCc(packet)

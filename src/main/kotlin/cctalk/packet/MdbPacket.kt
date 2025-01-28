@@ -1,7 +1,7 @@
 package cctalk.packet
 
 @OptIn(ExperimentalUnsignedTypes::class)
-data class MdbPacket(var data: UByteArray = UByteArray(MAX_BLOCK_LENGTH)) {
+data class MdbPacket(var data: ByteArray = ByteArray(MAX_BLOCK_LENGTH)) {
   companion object {
     const val MAX_BLOCK_LENGTH = 64
   }
@@ -12,8 +12,8 @@ data class MdbPacket(var data: UByteArray = UByteArray(MAX_BLOCK_LENGTH)) {
     }
   }
 
-  val dataLength: UByte
-    get() = data.size.toUByte()
+  val dataLength: Byte
+    get() = data.size.toByte()
 
   override fun equals(other: Any?): Boolean {
     if (this === other) return true

@@ -106,13 +106,11 @@ class DongleDeviceLedStatusTest {
     )
   }
 
-
-  @OptIn(ExperimentalUnsignedTypes::class)
   @ParameterizedTest
   @MethodSource("validationTestCases")
   fun `test setLedState validation`(testCase: LedTestCase) = runBlocking {
     // Arrange
-    val testPort = TestCcTalkPort(deviceAddress = 2u)
+    val testPort = TestCcTalkPort(deviceAddress = 2)
     val device = DongleDevice(
       port = testPort,
       address = 2,
@@ -138,25 +136,25 @@ class DongleDeviceLedStatusTest {
     // Verify packet was only sent for valid cases
     if (testCase.expectedStatus == CcTalkStatus.Ok) {
       val sentPacket = testPort.lastPacketSent!!
-      assertEquals(2u, sentPacket.destination)
-      assertEquals(1u, sentPacket.source)
+      assertEquals(2, sentPacket.destination)
+      assertEquals(1, sentPacket.source)
 
       // Verify correct header based on status
       val expectedHeader = when (testCase.status) {
-        LedStatus.ON, LedStatus.OFF -> 107u
-        LedStatus.BLINK -> 108u
+        LedStatus.ON, LedStatus.OFF -> 107
+        LedStatus.BLINK -> 108
       }
-      assertEquals(expectedHeader.toUByte(), sentPacket.header)
+      assertEquals(expectedHeader, sentPacket.header)
 
       // Verify payload
       val data = sentPacket.data
       assertEquals(2, data.size)
-      assertEquals(testCase.ledNumber.toUByte(), data[0])
+      assertEquals(testCase.ledNumber, data[0])
 
       val expectedPayload = when (testCase.status) {
-        LedStatus.OFF -> 1u
-        LedStatus.ON -> 0u
-        LedStatus.BLINK -> (testCase.time / 50).toUByte()
+        LedStatus.OFF -> 1
+        LedStatus.ON -> 0
+        LedStatus.BLINK -> (testCase.time / 50)
       }
       assertEquals(expectedPayload, data[1])
     }

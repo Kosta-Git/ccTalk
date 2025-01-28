@@ -3,16 +3,15 @@ package cctalk.device
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import be.inotek.communication.packet.CcTalkPacket
-import be.inotek.communication.packet.CcTalkPacketBuilder
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
+import cctalk.packet.CcTalkPacket
+import cctalk.packet.CcTalkPacketBuilder
 import cctalk.serial.CcTalkPort
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class TestCcTalkPort(
-  private val deviceAddress: UByte = 2u,
-  private val responses: Map<UByte, (CcTalkPacket) -> Either<CcTalkError, CcTalkPacket>> = emptyMap(),
+  private val deviceAddress: Int = 2,
+  private val responses: Map<Int, (CcTalkPacket) -> Either<CcTalkError, CcTalkPacket>> = emptyMap(),
   private var forcedError: CcTalkError? = null
 ) : CcTalkPort {
 
@@ -21,9 +20,9 @@ class TestCcTalkPort(
     private set
 
   // Track how many times each header was called
-  private val headerCallCounts = mutableMapOf<UByte, Int>()
+  private val headerCallCounts = mutableMapOf<Int, Int>()
 
-  fun getHeaderCallCount(header: UByte): Int = headerCallCounts[header] ?: 0
+  fun getHeaderCallCount(header: Int): Int = headerCallCounts[header] ?: 0
 
   override suspend fun talkCcNoResponse(packet: CcTalkPacketBuilder.() -> Unit): Either<CcTalkError, CcTalkStatus> =
     talkCcNoResponse(CcTalkPacket.build(packet))
@@ -57,7 +56,7 @@ class TestCcTalkPort(
   override suspend fun talkCcStringResponse(packet: CcTalkPacket): Either<CcTalkError, String> =
     talkCc(packet) { response ->
       response.data
-        .filter { it >= 0x1fu && it <= 0x80u }
+        .filter { it > 0x1f && it < 0x80 }
         .map { it.toInt().toChar() }
         .joinToString("")
     }
@@ -69,7 +68,7 @@ class TestCcTalkPort(
     talkCc(packet) { response ->
       response.data
         .reversed()
-        .filter { it >= 0x1fu && it <= 0x80u }
+        .filter { it > 0x1f && it < 0x80 }
         .map { it.toInt().toChar() }
         .joinToString("")
     }
@@ -124,7 +123,7 @@ class TestCcTalkPort(
         destination(1u)
         source(packet.destination)
         header(0u)
-        data(text.map { it.code.toUByte() }.toUByteArray())
+        data(text.map { it.code.toByte() }.toByteArray())
         checksumType(packet.checksumType)
       })
     }
@@ -134,7 +133,7 @@ class TestCcTalkPort(
         destination(1u)
         source(packet.destination)
         header(0u)
-        data(ubyteArrayOf(value.toUByte()))
+        data(byteArrayOf(value.toByte()))
         checksumType(packet.checksumType)
       })
     }

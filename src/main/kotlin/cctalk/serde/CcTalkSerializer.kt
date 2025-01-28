@@ -2,12 +2,16 @@ package cctalk.serde
 
 import arrow.core.Either
 import arrow.core.raise.either
-import arrow.core.right
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacket
-import be.inotek.communication.packet.MAX_BLOCK_LENGTH
 import cctalk.CcTalkError
-import cctalk.CcTalkStatus
+import cctalk.packet.CcTalkPacket
+import cctalk.packet.CcTalkPacketBuilder
+import cctalk.packet.DATA_LENGTH_OFFSET
+import cctalk.packet.DATA_OFFSET
+import cctalk.packet.DESTINATION_OFFSET
+import cctalk.packet.HEADER_OFFSET
+import cctalk.packet.MAX_BLOCK_LENGTH
+import cctalk.packet.SOURCE_OFFSET
 
 data class CcTalkSerializationResult(val data: ByteArray, val size: Int) {
   override fun equals(other: Any?): Boolean {
@@ -30,7 +34,7 @@ data class CcTalkSerializationResult(val data: ByteArray, val size: Int) {
 }
 
 interface CcTalkSerializer {
-  fun serialize(packet: CcTalkPacket, computeChecksum: Boolean = true): CcTalkSerializationResult
+  fun serialize(packet: CcTalkPacket): CcTalkSerializationResult
   fun deserialize(
     data: ByteArray,
     checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8,
@@ -38,11 +42,21 @@ interface CcTalkSerializer {
   ): Either<CcTalkError, CcTalkPacket>
 }
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class CcTalkSerializerImpl : CcTalkSerializer {
-  override fun serialize(packet: CcTalkPacket, computeChecksum: Boolean): CcTalkSerializationResult = with(packet) {
-    if (computeChecksum) setCheckSum()
-    return CcTalkSerializationResult(ByteArray(rawData.size) { i -> rawData[i].toByte() }, rawData.size)
+  override fun serialize(packet: CcTalkPacket): CcTalkSerializationResult = with(packet) {
+    ByteArray(dataLength + 5) {
+      when (it) {
+        0 -> destination.toByte()
+        1 -> dataLength.toByte()
+        2 -> source.toByte()
+        3 -> header.toByte()
+        in 4 until dataLength + 4 -> data[it - 4].toByte()
+        dataLength + 4 -> checksum.toByte()
+        else -> throw IllegalStateException("Invalid index $it")
+      }
+    }.let { rawData ->
+      CcTalkSerializationResult(rawData, rawData.size)
+    }
   }
 
   /**
@@ -58,9 +72,25 @@ class CcTalkSerializerImpl : CcTalkSerializer {
     checksumType: CcTalkChecksumTypes,
     verifyChecksum: Boolean
   ): Either<CcTalkError, CcTalkPacket> = either {
-    if(data.size < 5 || data.size > MAX_BLOCK_LENGTH) raise(CcTalkError.DataLengthError(5, MAX_BLOCK_LENGTH, data.size))
-    val packet = CcTalkPacket(UByteArray(data.size) { i -> data[i].toUByte() }, checksumType)
-    if (verifyChecksum && !packet.isChecksumValid()) raise(CcTalkError.ChecksumError())
-    packet
+    if (data.size < 5 || data.size > MAX_BLOCK_LENGTH) raise(
+      CcTalkError.DataLengthError(
+        5,
+        MAX_BLOCK_LENGTH,
+        data.size
+      )
+    )
+    // Convert to uByte then int to have real byte representation (0-255)
+    CcTalkPacketBuilder().apply {
+      destination(data[DESTINATION_OFFSET].toUByte().toInt())
+      val advertisedDataLength = data[DATA_LENGTH_OFFSET].toUByte().toInt()
+      source(data[SOURCE_OFFSET].toUByte().toInt())
+      header(data[HEADER_OFFSET].toUByte().toInt())
+      data(IntArray(data.size - 5) { data[DATA_OFFSET + it].toUByte().toInt() })
+      checksum(data[data.size - 1].toUByte().toInt())
+      checksumType(checksumType)
+      if(advertisedDataLength != data.size - 5) raise(CcTalkError.DataFormatError(advertisedDataLength, data.size - 5))
+    }.build().apply {
+      if (verifyChecksum && !isChecksumValid()) raise(CcTalkError.ChecksumError())
+    }
   }
 }

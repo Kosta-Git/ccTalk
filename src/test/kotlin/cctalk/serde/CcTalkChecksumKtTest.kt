@@ -1,7 +1,7 @@
 package cctalk.serde
 
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacketBuilder
+import cctalk.packet.CcTalkPacketBuilder
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -18,8 +18,25 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    packet.setCheckSum()
     assertEquals(11u, packet.checksum.toUInt())
+    assertTrue(packet.isChecksumValid())
+  }
+
+  @Test
+  fun `test Simple8 checksum calculation from reference spec`() {
+    //[0] = {byte} 2
+    //[1] = {byte} 0
+    //[2] = {byte} 1
+    //[3] = {byte} 246
+    //[4] = {byte} 7
+    val packet = CcTalkPacketBuilder()
+      .destination(2u)
+      .source(1u)
+      .header(246u)
+      .checksumType(CcTalkChecksumTypes.Simple8)
+      .build()
+
+    assertEquals(7, packet.checksum)
     assertTrue(packet.isChecksumValid())
   }
 
@@ -33,7 +50,6 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    packet.setCheckSum()
     assertTrue(packet.isChecksumValid())
 
     // Verify total sum is zero (modulo 256)
@@ -57,7 +73,6 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    packet.setCheckSum()
     assertEquals(143u, packet.checksum.toUInt())
     assertTrue(packet.isChecksumValid())
   }
@@ -71,7 +86,6 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.CRC16)
       .build()
 
-    packet.setCrc16Checksum()
     assertTrue(packet.isCrc16ChecksumValid())
 
     // Verify CRC bytes are different
@@ -80,51 +94,61 @@ class CcTalkChecksumTest {
 
   @Test
   fun `test checksum validation with corrupted data`() {
-    val packet = CcTalkPacketBuilder()
+    var packet = CcTalkPacketBuilder()
       .destination(2u)
       .source(1u)
       .header(242u)
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    packet.setCheckSum()
     val originalChecksum = packet.checksum
 
     // Corrupt the header
-    packet.header = (packet.header.toInt() + 1).toUByte()
-    assertFalse(packet.isChecksumValid())
+    val corruptedPacket = CcTalkPacketBuilder()
+      .destination(2u)
+      .source(1u)
+      .header(243u)
+      .checksumType(CcTalkChecksumTypes.Simple8)
+      .checksum(originalChecksum)
+      .build()
+    assertFalse(corruptedPacket.isChecksumValid())
 
-    // Restore header but corrupt checksum
-    packet.header = (packet.header.toInt() - 1).toUByte()
-    packet.checksum = (originalChecksum.toInt() + 1).toUByte()
-    assertFalse(packet.isChecksumValid())
+    assertTrue(packet.isChecksumValid())
   }
 
   @Test
   fun `test CRC16 checksum validation with corrupted data`() {
-    val packet = CcTalkPacketBuilder()
+    var packet = CcTalkPacketBuilder()
       .destination(40u)
       .source(0u)
       .header(242u)
       .checksumType(CcTalkChecksumTypes.CRC16)
       .build()
 
-    packet.setCrc16Checksum()
     val originalSource = packet.source
     val originalChecksum = packet.checksum
 
     // Corrupt the header
-    packet.header = 0u
-    assertFalse(packet.isCrc16ChecksumValid())
+    val headerCorruptedPacket = CcTalkPacketBuilder()
+      .destination(40u)
+      .source(0u)
+      .header(243u)
+      .checksumType(CcTalkChecksumTypes.CRC16)
+      .checksum(originalChecksum)
+      .build()
+    assertFalse(headerCorruptedPacket.isCrc16ChecksumValid())
 
     // Restore header but corrupt CRC bytes
-    packet.header = (packet.header.toInt() - 1).toUByte()
-    packet.source = (originalSource.toInt() + 1).toUByte()
-    assertFalse(packet.isCrc16ChecksumValid())
+    val sourceCorruptedPacket = CcTalkPacketBuilder()
+      .destination(40u)
+      .source(1u)
+      .header(242u)
+      .checksumType(CcTalkChecksumTypes.CRC16)
+      .checksum(originalChecksum)
+      .build()
+    assertFalse(sourceCorruptedPacket.isCrc16ChecksumValid())
 
-    packet.source = originalSource
-    packet.checksum = (originalChecksum.toInt() + 1).toUByte()
-    assertFalse(packet.isCrc16ChecksumValid())
+    assertTrue(packet.isCrc16ChecksumValid())
   }
 
   @Test
@@ -139,7 +163,6 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    request.setCheckSum()
     assertTrue(request.isChecksumValid())
     assertEquals(11u, request.checksum.toUInt())
 
@@ -152,7 +175,6 @@ class CcTalkChecksumTest {
       .checksumType(CcTalkChecksumTypes.Simple8)
       .build()
 
-    response.setCheckSum()
     assertTrue(response.isChecksumValid())
     assertEquals(143u, response.checksum.toUInt())
   }

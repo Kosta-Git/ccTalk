@@ -24,13 +24,14 @@ import cctalk.device.SelectorDevice.Companion.MAX_EVENT_POLL
 import cctalk.selector.*
 import cctalk.selector.SelectorPollEvent.Companion.COIN_EVENTS
 import cctalk.serial.CcTalkPort
+import kotlin.experimental.and
+import kotlin.experimental.or
 import kotlin.math.min
 import kotlin.math.pow
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class SelectorDevice(
   port: CcTalkPort,
-  address: Byte = 2,
+  address: Int = 2,
   checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
 ) : CcTalkDevice(port, address, checksumType) {
   companion object {
@@ -47,7 +48,7 @@ class SelectorDevice(
     talkCcNoResponse {
       withDefaults(this@SelectorDevice)
       header(SET_MASTER_INHIBIT)
-      data(ubyteArrayOf(if (enabled) 0u else 1u))
+      data(byteArrayOf(if (enabled) 0 else 1))
     }.bind()
   }
 
@@ -89,10 +90,10 @@ class SelectorDevice(
       withDefaults(this@SelectorDevice)
       header(SETUP_ESCROW_STATE)
       data(
-        ubyteArrayOf(
+        byteArrayOf(
           when (state) {
-            EscrowState.Collect -> 4u
-            EscrowState.Return -> 2u
+            EscrowState.Collect -> 4
+            EscrowState.Return -> 2
             else -> raise(
               CcTalkError.WrongParameterError(
                 "invalid escrow state $state, must be either Collect or Return"
@@ -113,19 +114,19 @@ class SelectorDevice(
    */
   suspend fun setupPrice(priceSetting: SelCoinPriceSetting): Either<CcTalkError, CcTalkStatus> = either {
     val iPrice = (priceSetting.price * 100).toInt()
-    var flag: UByte = 0u
-    if (priceSetting.cashlessPaymentBlocking) flag = flag or 0x01u
-    if (priceSetting.machineOccupied) flag = flag or 0x02u
-    if (priceSetting.serviceModeActive) flag = flag or 0x04u
+    var flag: Byte = 0
+    if (priceSetting.cashlessPaymentBlocking) flag = flag or 0x01
+    if (priceSetting.machineOccupied) flag = flag or 0x02
+    if (priceSetting.serviceModeActive) flag = flag or 0x04
 
     talkCcNoResponse {
       withDefaults(this@SelectorDevice)
       header(COIN_PRECISION)
       data(
-        ubyteArrayOf(
-          9u,
-          iPrice.toUByte(),
-          (iPrice shr 8).toUByte(),
+        byteArrayOf(
+          9,
+          iPrice.toByte(),
+          (iPrice shr 8).toByte(),
           flag
         )
       )
@@ -156,7 +157,7 @@ class SelectorDevice(
     talkCcNoResponse {
       withDefaults(this@SelectorDevice)
       header(MODIFY_SORTER_OVERRIDE)
-      data(ubyteArrayOf(ovr.toUByte(), (ovr shr 8).toUByte()))
+      data(byteArrayOf(ovr.toByte(), (ovr shr 8).toByte()))
     }.bind()
   }
 
@@ -178,7 +179,7 @@ class SelectorDevice(
       talkCcNoResponse {
         withDefaults(this@SelectorDevice)
         header(MODIFY_SORTER_PATH)
-        data(ubyteArrayOf((i + 1).toUByte(), sorterPaths[i].sorterPath))
+        data(intArrayOf(i + 1, sorterPaths[i].sorterPath))
       }.bind()
     }
     CcTalkStatus.Ok
@@ -253,7 +254,7 @@ class SelectorDevice(
     val preCoinData = talkCc {
       withDefaults(this@SelectorDevice)
       header(COIN_PRECISION)
-      data(ubyteArrayOf(8u))
+      data(byteArrayOf(8))
     }.bind()
 
     var coinInserted = false
@@ -282,7 +283,7 @@ class SelectorDevice(
     talkCc {
       withDefaults(this@SelectorDevice)
       header(CcTalkCommand.REQUEST_COIN_ID)
-      if (coinNumber > -1) data(ubyteArrayOf((coinNumber + 1).toUByte()))
+      if (coinNumber > -1) data(byteArrayOf((coinNumber + 1).toByte()))
     }.bind()
       .data
       .forEach { builder.append(it.toInt().toChar()) }
@@ -314,7 +315,7 @@ class SelectorDevice(
 
     val parsed = try {
       valueStr.toDouble()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       raise(CcTalkError.PayloadError("valueStr must be a valid double"))
     }
 
@@ -368,11 +369,11 @@ class SelectorDevice(
       .toList()
   }
 
-  suspend fun getSorterPath(coinNumber: Int): Either<CcTalkError, UByte> = either {
+  suspend fun getSorterPath(coinNumber: Int): Either<CcTalkError, Int> = either {
     talkCc {
       withDefaults(this@SelectorDevice)
       header(CcTalkCommand.REQUEST_SORTER_PATH)
-      data(ubyteArrayOf((coinNumber + 1).toUByte()))
+      data(intArrayOf(coinNumber + 1))
     }.bind()
       .let {
         it.data.firstOrNull() ?: raise(CcTalkError.DataFormatError(1, 0))
@@ -399,16 +400,16 @@ class SelectorDevice(
   suspend fun setSorterOverride(overrides: List<Boolean>): Either<CcTalkError, CcTalkStatus> = either {
     ensure(overrides.size >= 8) { CcTalkError.WrongParameterError("overrides should contain at least 8 elements.") }
 
-    var mask: UByte = 0xFFu
+    var mask: Byte = 0xFF.toByte()
     for (i in 0 until 8.coerceAtMost(overrides.size)) {
       val currentFlag = overrides[i]
-      if (currentFlag) mask = mask and (0x01u shl i).inv().toUByte()
+      if (currentFlag) mask = mask and (0x01u shl i).inv().toByte()
     }
 
     talkCcNoResponse {
       withDefaults(this@SelectorDevice)
       header(CcTalkCommand.MODIFY_SORTER_OVERRIDE)
-      data(ubyteArrayOf(mask))
+      data(byteArrayOf(mask))
     }.bind()
   }
 
@@ -434,19 +435,19 @@ class SelectorDevice(
     talkCcNoResponse {
       withDefaults(this@SelectorDevice)
       header(CcTalkCommand.PRE_COIN_INHIBIT_COMPAT)
-      data(ubyteArrayOf(1u))
+      data(byteArrayOf(1))
     }.bind()
 
     talkCcNoResponse { // Set inhibit
       withDefaults(this@SelectorDevice)
       header(CcTalkCommand.MODIFY_INHIBIT_STATUS)
-      data(ubyteArrayOf(inhibit.toUByte(), (inhibit shr 8).toUByte()))
+      data(byteArrayOf(inhibit.toByte(), (inhibit shr 8).toByte()))
     }.bind()
   }
 
   suspend fun setAllCoinInhibit(status: Boolean): Either<CcTalkError, CcTalkStatus> = either {
     (0 until 16)
-      .map { SelCoinStatus(status, 0u, false) }
+      .map { SelCoinStatus(status, 0, false) }
       .toList()
       .let {
         setCoinInhibit(it).bind()

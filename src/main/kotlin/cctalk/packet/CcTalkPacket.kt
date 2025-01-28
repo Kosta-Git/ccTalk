@@ -1,7 +1,8 @@
-package be.inotek.communication.packet
+package cctalk.packet
 
 import be.inotek.communication.CcTalkChecksumTypes
 import cctalk.device.CcTalkDevice
+import cctalk.serde.getCheckSum
 
 const val MAX_BLOCK_LENGTH = 255
 const val DESTINATION_OFFSET = 0
@@ -10,72 +11,53 @@ const val SOURCE_OFFSET = 2
 const val HEADER_OFFSET = 3
 const val DATA_OFFSET = 4
 
-@OptIn(ExperimentalUnsignedTypes::class)
-data class CcTalkPacket(
-  var rawData: UByteArray = UByteArray(5),
-  val checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
-) {
-  init {
-    require(rawData.size >= 5) { "Raw data must be at least 5 bytes" }
-  }
+class CcTalkPacket {
+  val destination: Int
+  val dataLength: Int
+  val source: Int
+  val header: Int
+  val data: IntArray
+  val checksum: Int
+  val checksumType: CcTalkChecksumTypes
 
-  var destination: UByte
-    get() = rawData[DESTINATION_OFFSET]
-    set(value) {
-      rawData[DESTINATION_OFFSET] = value
-    }
+  constructor(
+    destination: Int,
+    dataLength: Int,
+    source: Int,
+    header: Int,
+    data: IntArray,
+    checksum: Int?,
+    checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
+  ) {
+    require(destination in 0..255) { "Destination must be between 0 and 255" }
+    require(dataLength in 0..MAX_BLOCK_LENGTH - 5) { "Data length must be less than ${MAX_BLOCK_LENGTH - 5}" }
+    require(source in 0..255) { "Source must be between 0 and 255" }
+    require(header in 0..255) { "Header must be between 0 and 255" }
+    require(data.size == dataLength) { "Data length must match data length" }
 
-  var dataLength: UByte
-    get() = rawData[DATA_LENGTH_OFFSET]
-    set(value) {
-      require(value.toInt() <= MAX_BLOCK_LENGTH - 5) { "Data length must be less than ${MAX_BLOCK_LENGTH - 5}" }
-      if (value != dataLength) {
-        // Save header information
-        val oldDestination = destination
-        val oldSource = source
-        val oldHeader = header
-        val oldChecksum = checksum
+    this.checksumType = checksumType
+    this.destination = destination
+    this.dataLength = dataLength
+    this.header = header
+    this.data = data
 
-        // Create new array with proper size
-        rawData = UByteArray(DATA_OFFSET + value.toInt() + 1)
+    if (checksum == null) {
+      when (checksumType) {
+        CcTalkChecksumTypes.Simple8 -> {
+          this.source = source
+          this.checksum = getCheckSum()
+        }
 
-        // Restore header information
-        destination = oldDestination
-        source = oldSource
-        header = oldHeader
-        checksum = oldChecksum
+        CcTalkChecksumTypes.CRC16 -> {
+          val computedChecksum = getCheckSum()
+          this.source = (computedChecksum and 0xFF).toUByte().toInt()
+          this.checksum = ((computedChecksum shr 8) and 0xFF).toUByte().toInt()
+        }
       }
-      rawData[DATA_LENGTH_OFFSET] = value
+    } else {
+      this.source = source
+      this.checksum = checksum
     }
-
-  var source: UByte
-    get() = rawData[SOURCE_OFFSET]
-    set(value) {
-      rawData[SOURCE_OFFSET] = value
-    }
-
-  var header: UByte
-    get() = rawData[HEADER_OFFSET]
-    set(value) {
-      rawData[HEADER_OFFSET] = value
-    }
-
-  var data: UByteArray
-    get() = rawData.copyOfRange(DATA_OFFSET, DATA_OFFSET + dataLength.toInt())
-    set(value) {
-      dataLength = value.size.toUByte()
-      value.copyInto(rawData, DATA_OFFSET)
-    }
-
-  var checksum: UByte
-    get() = rawData[rawData.size - 1]
-    set(value) {
-      rawData[rawData.size - 1] = value
-    }
-
-  fun clear() {
-    rawData = UByteArray(5)
-    dataLength = 0u
   }
 
   companion object {
@@ -83,54 +65,83 @@ data class CcTalkPacket(
       CcTalkPacketBuilder().apply(block).build()
   }
 
-  override fun equals(other: Any?): Boolean {
-    if (this === other) return true
-    if (javaClass != other?.javaClass) return false
-    other as CcTalkPacket
-    return rawData.contentEquals(other.rawData)
-  }
-
-  override fun hashCode(): Int {
-    return rawData.contentHashCode()
-  }
-
   override fun toString(): String =
     "CcTalkPacket(destination=${destination}, dataLength=${dataLength}, " +
         "source=${source}, header=${header}, data=${data.joinToString()})"
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (javaClass != other?.javaClass) return false
+
+    other as CcTalkPacket
+
+    if (destination != other.destination) return false
+    if (dataLength != other.dataLength) return false
+    if (source != other.source) return false
+    if (header != other.header) return false
+    if (checksum != other.checksum) return false
+    if (!data.contentEquals(other.data)) return false
+    if (checksumType != other.checksumType) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = destination
+    result = 31 * result + dataLength
+    result = 31 * result + source
+    result = 31 * result + header
+    result = 31 * result + checksum
+    result = 31 * result + data.contentHashCode()
+    result = 31 * result + checksumType.hashCode()
+    return result
+  }
 }
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class CcTalkPacketBuilder {
-  private var destination: UByte = 0u
-  private var source: UByte = CcTalkDevice.CcTalkCommand.SOURCE_ADDRESS
-  private var header: UByte = 0u
-  private var data: UByteArray = UByteArray(0)
-  private var checksum: UByte = 0u
+  private var destination: Int = 0
+  private var source: Int = CcTalkDevice.CcTalkCommand.SOURCE_ADDRESS.toInt()
+  private var header: Int = 0
+  private var data: IntArray = IntArray(0)
+  private var checksum: Int? = null
   private var checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8
 
-  fun destination(value: UByte) = apply { destination = value }
-  fun destination(value: Byte) = apply { destination = value.toUByte() }
-  fun source(value: UByte) = apply { source = value }
-  fun header(value: UByte) = apply { header = value }
-  fun data(value: UByteArray) = apply { data = value }
-  fun checksum(value: UByte) = apply { checksum = value }
+  fun destination(value: Int) = apply { destination = value }
+  fun source(value: Int) = apply { source = value }
+  fun header(value: Int) = apply { header = value }
+  fun checksum(value: Int) = apply { checksum = value }
+  fun data(value: IntArray) = apply { data = value }
+
+  fun destination(value: UByte) = apply { destination = value.toInt() }
+  fun source(value: UByte) = apply { source = value.toInt() }
+  fun header(value: UByte) = apply { header = value.toInt() }
+  fun checksum(value: UByte) = apply { checksum = value.toInt() }
+  fun data(value: UByteArray) = apply { data = value.map { it.toInt() }.toIntArray() }
+
+  fun destination(value: Byte) = apply { destination = value.toUByte().toInt() }
+  fun source(value: Byte) = apply { source = value.toUByte().toInt() }
+  fun header(value: Byte) = apply { header = value.toUByte().toInt() }
+  fun data(value: ByteArray) = apply { data = value.map { it.toUByte().toInt() }.toIntArray() }
+  fun checksum(value: Byte) = apply { checksum = value.toUByte().toInt() }
+
   fun checksumType(value: CcTalkChecksumTypes) = apply { checksumType = value }
   fun withDefaults(device: CcTalkDevice) = apply {
-    destination = device.address.toUByte()
+    destination = device.address
     source = CcTalkDevice.CcTalkCommand.SOURCE_ADDRESS
     checksumType = device.checksumType
   }
 
   fun build(): CcTalkPacket {
-    val packet = CcTalkPacket(
-      UByteArray(DATA_OFFSET + data.size + 1),
-      checksumType
+    require(data.size <= MAX_BLOCK_LENGTH - 5) { "Data length must be less than ${MAX_BLOCK_LENGTH - 5}" }
+    return CcTalkPacket(
+      destination = destination,
+      dataLength = data.size,
+      source = source,
+      header = header,
+      data = data,
+      checksum = checksum,
+      checksumType = checksumType
     )
-    packet.destination = destination
-    packet.data = data
-    packet.source = source
-    packet.header = header
-    packet.checksum = checksum
-    return packet
   }
 }

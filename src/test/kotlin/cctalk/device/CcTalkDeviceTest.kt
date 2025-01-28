@@ -13,10 +13,10 @@ class CcTalkDeviceTest {
   fun `deviceCategory should return correct category`() = runBlocking {
     // Arrange
     val responses = mapOf(
-      245.toUByte() to TestCcTalkPort.createStringResponse("Coin Acceptor")
+      245 to TestCcTalkPort.createStringResponse("Coin Acceptor")
     )
     val testPort = TestCcTalkPort(
-      deviceAddress = 2u,
+      deviceAddress = 2,
       responses = responses
     )
     val device = CcTalkDevice(
@@ -34,19 +34,19 @@ class CcTalkDeviceTest {
 
     // Verify correct packet was sent
     val sentPacket = testPort.lastPacketSent!!
-    assertEquals(2u, sentPacket.destination)
-    assertEquals(1u, sentPacket.source)
-    assertEquals(245u, sentPacket.header)
+    assertEquals(2, sentPacket.destination)
+    assertEquals(1, sentPacket.source)
+    assertEquals(245, sentPacket.header)
   }
 
   @Test
   fun `simplePoll should return Ok`() = runBlocking {
     // Arrange
     val responses = mapOf(
-      254.toUByte() to TestCcTalkPort.createLongResponse(0)
+      254 to TestCcTalkPort.createLongResponse(0)
     )
     val testPort = TestCcTalkPort(
-      deviceAddress = 2u,
+      deviceAddress = 2,
       responses = responses
     )
     val device = CcTalkDevice(
@@ -63,16 +63,16 @@ class CcTalkDeviceTest {
 
     // Verify correct packet was sent
     val sentPacket = testPort.lastPacketSent!!
-    assertEquals(2u, sentPacket.destination)
-    assertEquals(1u, sentPacket.source)
-    assertEquals(254u, sentPacket.header)
+    assertEquals(2, sentPacket.destination)
+    assertEquals(1, sentPacket.source)
+    assertEquals(254, sentPacket.header)
   }
 
   @Test
   fun `simplePoll should handle communication error`() = runBlocking {
     // Arrange
     val testPort = TestCcTalkPort(
-      deviceAddress = 2u,
+      deviceAddress = 2,
       forcedError = CcTalkError.SendError()
     )
     val device = CcTalkDevice(
@@ -91,7 +91,7 @@ class CcTalkDeviceTest {
   @Test
   fun `multiple commands should track call counts`() = runBlocking {
     // Arrange
-    val testPort = TestCcTalkPort(deviceAddress = 2u)
+    val testPort = TestCcTalkPort(deviceAddress = 2)
     val device = CcTalkDevice(
       port = testPort,
       address = 2,
@@ -104,7 +104,7 @@ class CcTalkDeviceTest {
     device.equipmentCategoryId()
 
     // Assert
-    assertEquals(2, testPort.getHeaderCallCount(254u)) // simplePoll called twice
-    assertEquals(1, testPort.getHeaderCallCount(245u)) // deviceCategory called once
+    assertEquals(2, testPort.getHeaderCallCount(254)) // simplePoll called twice
+    assertEquals(1, testPort.getHeaderCallCount(245)) // deviceCategory called once
   }
 }

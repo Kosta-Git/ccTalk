@@ -1,9 +1,9 @@
 package cctalk.serde
 
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacket
-import be.inotek.communication.packet.MAX_BLOCK_LENGTH
 import cctalk.CcTalkStatus
+import cctalk.packet.CcTalkPacket
+import cctalk.packet.MAX_BLOCK_LENGTH
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -18,69 +18,46 @@ class CcTalkSerializerImplTest {
   fun `serialize with computeChecksum true should set checksum`() {
     // Given
     val packet = CcTalkPacket(
-      UByteArray(7) {
-        when (it) {
-          0 -> 2u    // destination
-          1 -> 2u    // data length
-          2 -> 1u    // source
-          3 -> 254u  // header
-          4 -> 5u    // data[0]
-          5 -> 6u    // data[1]
-          6 -> 0u    // checksum (will be calculated)
-          else -> 0u
-        }
-      },
-      CcTalkChecksumTypes.Simple8
+      destination = 2,
+      dataLength = 2,
+      source = 1,
+      header = 254,
+      data = intArrayOf(5, 6),
+      checksum = null,
+      checksumType = CcTalkChecksumTypes.Simple8
     )
 
     // When
-    val result = serializer.serialize(packet, computeChecksum = true)
+    val result = serializer.serialize(packet)
 
     // Then
     assertEquals(7, result.size)
     assertTrue(
       CcTalkPacket(
-        UByteArray(result.size) { result.data[it].toUByte() },
-        CcTalkChecksumTypes.Simple8
+        destination = result.data[0].toUByte().toInt(),
+        dataLength = result.data[1].toUByte().toInt(),
+        source = result.data[2].toUByte().toInt(),
+        header = result.data[3].toUByte().toInt(),
+        data = IntArray(2) { result.data[it + 4].toInt() },
+        checksum = result.data[6].toUByte().toInt(),
+        checksumType = CcTalkChecksumTypes.Simple8
       ).isChecksumValid()
     )
-  }
-
-  @Test
-  fun `serialize with computeChecksum false should not set checksum`() {
-    // Given
-    val packet = CcTalkPacket(
-      UByteArray(7) { 1u }, // All 1's will produce invalid checksum
-      CcTalkChecksumTypes.Simple8
-    )
-
-    // When
-    val result = serializer.serialize(packet, computeChecksum = false)
-
-    // Then
-    assertEquals(7, result.size)
-    assertContentEquals(ByteArray(7) { 1 }, result.data)
   }
 
   @Test
   fun `deserialize with valid data and checksum should succeed`() {
     // Given
     val originalPacket = CcTalkPacket(
-      UByteArray(7) {
-        when (it) {
-          0 -> 2u    // destination
-          1 -> 2u    // data length
-          2 -> 1u    // source
-          3 -> 254u  // header
-          4 -> 5u    // data[0]
-          5 -> 6u    // data[1]
-          6 -> 0u    // checksum (will be calculated)
-          else -> 0u
-        }
-      },
-      CcTalkChecksumTypes.Simple8
+      destination = 2,
+      dataLength = 2,
+      source = 1,
+      header = 254,
+      data = intArrayOf(5, 6),
+      checksum = null,
+      checksumType = CcTalkChecksumTypes.Simple8
     )
-    val serialized = serializer.serialize(originalPacket, computeChecksum = true)
+    val serialized = serializer.serialize(originalPacket)
 
     // When
     val deserialized = serializer.deserialize(serialized.data, CcTalkChecksumTypes.Simple8)
@@ -119,7 +96,7 @@ class CcTalkSerializerImplTest {
   @Test
   fun `deserialize with verifyChecksum false should skip checksum validation`() {
     // Given
-    val data = ByteArray(5) { 1 } // All 1's will produce invalid checksum
+    val data = ByteArray(6) { 1 } // All 1's will produce invalid checksum
 
     // When
     val packet = serializer.deserialize(data, CcTalkChecksumTypes.Simple8, verifyChecksum = false)
@@ -131,7 +108,7 @@ class CcTalkSerializerImplTest {
   @Test
   fun `deserialize with invalid checksum should throw IllegalStateException`() {
     // Given
-    val data = ByteArray(5) { 1 } // All 1's will produce invalid checksum
+    val data = ByteArray(6) { 1 } // All 1's will produce invalid checksum
 
     // When/Then
     var deserialized = serializer.deserialize(data, CcTalkChecksumTypes.Simple8)
@@ -143,23 +120,17 @@ class CcTalkSerializerImplTest {
   fun `test CRC16 checksum serialization and deserialization`() {
     // Given
     val originalPacket = CcTalkPacket(
-      UByteArray(7) {
-        when (it) {
-          0 -> 2u    // destination
-          1 -> 2u    // data length
-          2 -> 0u    // source (will be part of CRC)
-          3 -> 254u  // header
-          4 -> 5u    // data[0]
-          5 -> 6u    // data[1]
-          6 -> 0u    // checksum (will be calculated)
-          else -> 0u
-        }
-      },
-      CcTalkChecksumTypes.CRC16
+      destination = 2,
+      dataLength = 2,
+      source = 0,
+      header = 254,
+      data = intArrayOf(5, 6),
+      checksum = null,
+      checksumType = CcTalkChecksumTypes.CRC16
     )
 
     // When
-    val serialized = serializer.serialize(originalPacket, computeChecksum = true)
+    val serialized = serializer.serialize(originalPacket)
     val deserialized = serializer.deserialize(serialized.data, CcTalkChecksumTypes.CRC16)
 
     // Then

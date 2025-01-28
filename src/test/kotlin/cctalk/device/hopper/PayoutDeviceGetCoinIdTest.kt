@@ -2,11 +2,11 @@ package cctalk.device.hopper
 
 import arrow.core.Either
 import be.inotek.communication.CcTalkChecksumTypes
-import be.inotek.communication.packet.CcTalkPacket
 import cctalk.CcTalkStatus
 import cctalk.device.PayoutDevice
 import cctalk.device.PayoutDevice.PayoutMode
 import cctalk.device.TestCcTalkPort
+import cctalk.packet.CcTalkPacket
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -15,12 +15,11 @@ import java.util.stream.Stream
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class PayoutDeviceGetCoinIdTest {
 
   data class CoinIdTestCase(
     val coinNumber: Int,
-    val responseData: UByteArray?,
+    val responseData: ByteArray?,
     val expectedResult: Either<CcTalkStatus, PayoutDevice.CoinId>,
     val description: String
   ) {
@@ -49,7 +48,7 @@ class PayoutDeviceGetCoinIdTest {
       // Response format validation
       CoinIdTestCase(
         coinNumber = 0,
-        responseData = ubyteArrayOf(1u, 2u, 3u), // Too short
+        responseData = byteArrayOf(1, 2, 3), // Too short
         expectedResult = Either.Left(CcTalkStatus.DataFormat),
         description = "Response data too short"
       ),
@@ -57,19 +56,19 @@ class PayoutDeviceGetCoinIdTest {
       // Valid cases
       CoinIdTestCase(
         coinNumber = 0,
-        responseData = "EUR 1.00".toByteArray().map { it.toUByte() }.toUByteArray() + ubyteArrayOf(1u, 0u),
+        responseData = "EUR 1.00".toByteArray() + byteArrayOf(1, 0),
         expectedResult = Either.Right(PayoutDevice.CoinId("1", "EUR 1.00")),
         description = "Valid coin ID for EUR 1.00"
       ),
       CoinIdTestCase(
         coinNumber = 1,
-        responseData = "A TOKEN".toByteArray().map { it.toUByte() }.toUByteArray() + ubyteArrayOf(2u, 0u),
+        responseData = "A TOKEN".toByteArray() + byteArrayOf(2, 0),
         expectedResult = Either.Right(PayoutDevice.CoinId("2", "A TOKEN")),
         description = "Valid coin ID for TOKEN"
       ),
       CoinIdTestCase(
         coinNumber = 15,
-        responseData = "USD 0.25".toByteArray().map { it.toUByte() }.toUByteArray() + ubyteArrayOf(255u, 255u),
+        responseData = "USD 0.25".toByteArray() + byteArrayOf(255.toByte(), 255.toByte()),
         expectedResult = Either.Right(PayoutDevice.CoinId("65535", "USD 0.25")),
         description = "Valid coin ID with maximum value"
       )
@@ -81,11 +80,11 @@ class PayoutDeviceGetCoinIdTest {
   fun `test getHopperCoinId`(testCase: CoinIdTestCase) = runBlocking {
     // Arrange
     val responses = if (testCase.responseData != null) {
-      mapOf((131).toUByte() to { packet: CcTalkPacket ->
+      mapOf(131 to { packet: CcTalkPacket ->
         Either.Right(CcTalkPacket.build {
-          destination(1u)
-          source(3u)
-          header(0u)
+          destination(1)
+          source(3)
+          header(0)
           data(testCase.responseData)
           checksumType(packet.checksumType)
         })
@@ -95,7 +94,7 @@ class PayoutDeviceGetCoinIdTest {
     }
 
     val testPort = TestCcTalkPort(
-      deviceAddress = 3u,
+      deviceAddress = 3,
       responses = responses
     )
 
@@ -123,7 +122,7 @@ class PayoutDeviceGetCoinIdTest {
       is Either.Right -> {
         assertTrue(testCase.expectedResult is Either.Right)
         assertEquals(
-          (testCase.expectedResult as Either.Right).value,
+          testCase.expectedResult.value,
           result.value,
           "Expected coin ID ${testCase.expectedResult.value} but got ${result.value}"
         )
@@ -133,18 +132,18 @@ class PayoutDeviceGetCoinIdTest {
     // Verify packet was only sent for valid coin numbers
     if (testCase.coinNumber in 0..15) {
       val sentPacket = testPort.lastPacketSent!!
-      assertEquals(3u, sentPacket.destination)
-      assertEquals(1u, sentPacket.source)
-      assertEquals(131u, sentPacket.header)
+      assertEquals(3, sentPacket.destination)
+      assertEquals(1, sentPacket.source)
+      assertEquals(131, sentPacket.header)
       assertEquals(1, sentPacket.data.size)
-      assertEquals((testCase.coinNumber + 1).toUByte(), sentPacket.data[0])
+      assertEquals(testCase.coinNumber + 1, sentPacket.data[0])
     }
   }
 
   @Test
   fun `test device initialization with default values`() = runBlocking {
     // Arrange
-    val testPort = TestCcTalkPort(deviceAddress = 3u)
+    val testPort = TestCcTalkPort(deviceAddress = 3)
 
     // Act
     val device = PayoutDevice(
@@ -164,7 +163,7 @@ class PayoutDeviceGetCoinIdTest {
   @Test
   fun `test device initialization with custom values`() = runBlocking {
     // Arrange
-    val testPort = TestCcTalkPort(deviceAddress = 3u)
+    val testPort = TestCcTalkPort(deviceAddress = 3)
 
     // Act
     val device = PayoutDevice(

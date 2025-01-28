@@ -10,7 +10,7 @@ class MdbPacketTest {
 
   @Test
   fun `create empty packet`() {
-    val packet = MdbPacket(UByteArray(0))
+    val packet = MdbPacket(ByteArray(0))
     assertEquals(0, packet.dataLength.toInt())
     assertEquals(0, packet.data.size)
     assertTrue(packet.data.isEmpty())
@@ -18,7 +18,7 @@ class MdbPacketTest {
 
   @Test
   fun `create packet with data`() {
-    val initialData = UByteArray(3) { it.toUByte() }
+    val initialData = ByteArray(3) { it.toByte() }
     val packet = MdbPacket(initialData)
     assertEquals(3, packet.dataLength.toInt())
     assertTrue(packet.data.contentEquals(initialData))
@@ -27,7 +27,7 @@ class MdbPacketTest {
   @Test
   fun `set new data`() {
     val packet = MdbPacket()
-    val newData = UByteArray(5) { it.toUByte() }
+    val newData = ByteArray(5) { it.toByte() }
     packet.data = newData
     assertEquals(5, packet.dataLength.toInt())
     assertTrue(packet.data.contentEquals(newData))
@@ -36,16 +36,16 @@ class MdbPacketTest {
   @Test
   fun `set empty data`() {
     val packet = MdbPacket()
-    packet.data = UByteArray(0)
+    packet.data = ByteArray(0)
     assertEquals(0, packet.dataLength.toInt())
     assertTrue(packet.data.isEmpty())
   }
 
   @Test
   fun `test equality`() {
-    val data1 = UByteArray(3) { it.toUByte() }
-    val data2 = UByteArray(3) { it.toUByte() }
-    val data3 = UByteArray(2) { it.toUByte() }
+    val data1 = ByteArray(3) { it.toByte() }
+    val data2 = ByteArray(3) { it.toByte() }
+    val data3 = ByteArray(2) { it.toByte() }
 
     val packet1 = MdbPacket(data1)
     val packet2 = MdbPacket(data2)
@@ -59,7 +59,7 @@ class MdbPacketTest {
   @Test
   fun `verify fixed size array maintenance`() {
     val packet = MdbPacket()
-    val smallData = UByteArray(3) { it.toUByte() }
+    val smallData = ByteArray(3) { it.toByte() }
     packet.data = smallData
 
     // Internal array should still be MAX_BLOCK_LENGTH
@@ -70,7 +70,7 @@ class MdbPacketTest {
 
   @Test
   fun `verify unused array elements don't affect equality`() {
-    val data1 = UByteArray(3) { it.toUByte() }
+    val data1 = ByteArray(3) { it.toByte() }
     val packet1 = MdbPacket(data1)
 
     val packet2 = MdbPacket()

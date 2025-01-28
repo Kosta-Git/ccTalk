@@ -26,10 +26,9 @@ import cctalk.serial.CcTalkPort
 import java.util.*
 import kotlin.math.pow
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class PayoutDevice(
   port: CcTalkPort,
-  address: Byte = 3,
+  address: Int = 3,
   checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.Simple8,
   private var payoutMode: PayoutMode = PayoutMode.SerialNumber,
 ) : CcTalkDevice(port, address, checksumType) {
@@ -147,7 +146,7 @@ class PayoutDevice(
   }
 
   // TODO: The flags do not look correct
-  private fun computeSensorStatus(value: UByte, isHighLevel: Boolean): PayoutSensorStatus {
+  private fun computeSensorStatus(value: Int, isHighLevel: Boolean): PayoutSensorStatus {
     val supportedFlag = if (isHighLevel) 0x20 else 0x10
     val isTriggeredFlag = if (isHighLevel) 0x02 else 0x01
 
@@ -164,7 +163,7 @@ class PayoutDevice(
 
     var statuses = EnumSet.noneOf<PayoutStatusFlag>(PayoutStatusFlag::class.java)
     packet.data
-      .mapIndexed { index: Int, value: UByte -> value.toLong() shl (index * 8) }
+      .mapIndexed { index: Int, value: Int -> value.toLong() shl (index * 8) }
       .map { PayoutStatusFlag::fromCode }
       .forEach { statuses::add }
 
@@ -174,7 +173,7 @@ class PayoutDevice(
   suspend fun setPayoutEnabled(enabled: Boolean):  Either<CcTalkError, CcTalkStatus> = either {
     talkCc {
       header(HOPPER_ENABLE)
-      data(ubyteArrayOf(if (enabled) 0xA5u else 0u))
+      data(byteArrayOf(if (enabled) 0xA5.toByte() else 0.toByte()))
       withDefaults(this@PayoutDevice)
     }.bind()
     CcTalkStatus.Ok
@@ -204,7 +203,7 @@ class PayoutDevice(
         talkCc {
           // Payout with serial number
           header(REQUEST_HOPPER_DISPENSE)
-          data(ubyteArrayOf(it.data[0], it.data[1], it.data[2], coins.toUByte()))
+          data(intArrayOf(it.data[0], it.data[1], it.data[2], coins))
           withDefaults(this@PayoutDevice)
         }.bind()
       }
@@ -215,7 +214,7 @@ class PayoutDevice(
     // Pump RNG
     talkCc {
       header(REQUEST_HOPPER_PUMP_RNG)
-      data(UByteArray(8) { 0u })
+      data(ByteArray(8) { 0 })
       withDefaults(this@PayoutDevice)
     }.bind()
     // Request Cipher Key
@@ -226,7 +225,7 @@ class PayoutDevice(
     // Payout
     talkCc {
       header(REQUEST_HOPPER_DISPENSE)
-      data(UByteArray(9) { 0u }.also { it[8] = coins.toUByte() })
+      data(ByteArray(9) { 0 }.also { it[8] = coins.toByte() })
       withDefaults(this@PayoutDevice)
     }.bind()
     CcTalkStatus.Ok
@@ -245,7 +244,7 @@ class PayoutDevice(
 
     talkCc {
       header(REQUEST_HOPPER_PURGE)
-      data(ubyteArrayOf(0u))
+      data(byteArrayOf(0))
       withDefaults(this@PayoutDevice)
     }.bind().let { CcTalkStatus.Ok }
   }
@@ -287,7 +286,7 @@ class PayoutDevice(
     val currency = Currency.Search.byCcTalkID(id) ?: raise(CcTalkError.PayloadError("unknown currency: $id"))
     val coinValue = try {
       valueString.toDouble() / 10.0.pow(currency.decimals.toDouble())
-    } catch (e: NumberFormatException) {
+    } catch (_: NumberFormatException) {
       raise(CcTalkError.PayloadError("invalid coin value: $valueString"))
     }
 
@@ -301,7 +300,7 @@ class PayoutDevice(
 
     talkCc {
       header(REQUEST_HOPPER_COIN_ID)
-      data(ubyteArrayOf((coinNumber + 1).toUByte()))
+      data(byteArrayOf(((coinNumber + 1).toByte())))
       withDefaults(this@PayoutDevice)
     }.bind()
       .let {
@@ -314,7 +313,7 @@ class PayoutDevice(
             .map { it.toInt().toChar() }
             .forEach { append(it) }
         }
-        val coinId = it.data[dataLength - 2] + 256u * it.data[dataLength - 1]
+        val coinId = it.data[dataLength - 2] + 256 * it.data[dataLength - 1]
         CoinId(coinId.toString(), coinName.toString())
       }
   }

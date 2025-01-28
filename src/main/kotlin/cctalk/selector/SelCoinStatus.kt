@@ -2,6 +2,6 @@ package cctalk.selector
 
 data class SelCoinStatus(
   val inhibit: Boolean,
-  val sorterPath: UByte,
+  val sorterPath: Int,
   val overridePath: Boolean
 )

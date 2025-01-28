@@ -45,7 +45,7 @@ class ConcurrentSerialPort(
   private fun startQueueProcessor() {
     if (isRunning.get()) return
     isRunning.set(true)
-    scope.launch {
+    scope.launch(Dispatchers.IO) {
       while (isRunning.get()) {
         try {
           val request = sendQueue.receive()
@@ -71,8 +71,6 @@ class ConcurrentSerialPort(
     return with(port) {
       if (!isOpen) raise(CcTalkError.PortError(this.systemPortName ?: "Unknown port"))
 
-      clearDTR()
-      clearRTS()
       while (bytesAvailable() > 0) {
         readBytes(ByteArray(bytesAvailable()), bytesAvailable())
       }
