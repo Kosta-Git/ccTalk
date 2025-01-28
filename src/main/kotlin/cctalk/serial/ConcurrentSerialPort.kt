@@ -71,9 +71,8 @@ class ConcurrentSerialPort(
     return with(port) {
       if (!isOpen) raise(CcTalkError.PortError(this.systemPortName ?: "Unknown port"))
 
-      while (bytesAvailable() > 0) {
-        readBytes(ByteArray(bytesAvailable()), bytesAvailable())
-      }
+      port.clearDTR()
+      port.clearRTS()
 
       lastCommunicationTime = System.currentTimeMillis()
       var written = writeBytes(payload, payload.size)

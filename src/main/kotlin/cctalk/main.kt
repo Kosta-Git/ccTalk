@@ -16,7 +16,7 @@ suspend fun main() = withContext(Dispatchers.Default) {
   val portName = "/dev/cu.usbserial-whCCT1478159"
   val serialPort = SerialPort.getCommPort(portName)
   serialPort.openPort()
-  val port = ConcurrentSerialPort(serialPort)
+  val port = ConcurrentSerialPort(serialPort, localEcho = true)
   port.open()
   val ccTalkPort = CcTalkPortImpl(port, CcTalkSerializerImpl())
 
@@ -46,5 +46,5 @@ suspend fun main() = withContext(Dispatchers.Default) {
   )
 
   var payout = PayoutDevice(ccTalkPort, 3, CcTalkChecksumTypes.Simple8)
-  payout.manufacturerId().let { println(it) }
+  payout.deviceInformation().let { println(it.getOrNull() ?: "null") }
 }
