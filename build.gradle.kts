@@ -44,8 +44,9 @@ publishing {
     register<MavenPublication>("gpr") {
       from(components["java"])
       pom {
-        name.set("ccTalk")
-        description.set("ccTalk implementation for CCT910 in Kotlin")
+        groupId = "ccTalk"
+        name = "ccTalk"
+        description = "ccTalk implementation for CCT910 in Kotlin"
         url = "https://maven.pkg.github.com/Kosta-Git/ccTalk"
       }
     }
