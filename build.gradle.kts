@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
   kotlin("jvm") version "2.1.0"
   `maven-publish`
@@ -11,6 +13,8 @@ repositories {
 }
 
 dependencies {
+  api("org.slf4j:slf4j-api:2.0.12")
+
   implementation("com.fazecast:jSerialComm:2.10.4")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
   implementation("io.arrow-kt:arrow-core:2.0.0")

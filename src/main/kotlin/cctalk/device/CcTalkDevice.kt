@@ -7,6 +7,7 @@ import cctalk.CcTalkCategory
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.serial.CcTalkPort
+import org.slf4j.LoggerFactory
 
 open class CcTalkDevice(
   val port: CcTalkPort,

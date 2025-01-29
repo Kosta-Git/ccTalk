@@ -4,10 +4,13 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
 import cctalk.CcTalkError
-import com.fazecast.jSerialComm.SerialPort
 import cctalk.packet.PacketRequest
+import com.fazecast.jSerialComm.SerialPort
+import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.trace.Tracer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 
@@ -30,7 +33,8 @@ class ConcurrentSerialPort(
   val name: String = port.systemPortName,
   val index: Int = Random.nextInt(),
   val communicationDelay: Int = 50,
-  val timeOut: Int = 100
+  val timeOut: Int = 100,
+  private val logger: org.slf4j.Logger = LoggerFactory.getLogger(ConcurrentSerialPort::class.java)
 ) : ConcurrentPort {
   private val isRunning = AtomicBoolean(false)
   private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -46,6 +50,7 @@ class ConcurrentSerialPort(
     if (isRunning.get()) return
     isRunning.set(true)
     scope.launch(Dispatchers.IO) {
+      logger.info("Starting queue processor for port $name")
       while (isRunning.get()) {
         try {
           val request = sendQueue.receive()
@@ -57,11 +62,12 @@ class ConcurrentSerialPort(
           } catch (e: Exception) {
             request.response.completeExceptionally(e)
           }
-        } catch (e: CancellationException) {
+        } catch (_: CancellationException) {
           isRunning.set(false)
+          logger.error("Queue processor for port $name was cancelled")
           break
         } catch (e: Exception) {
-          TODO("Use logger")
+          logger.error("Error in queue processor for port $name", e)
         }
       }
     }
