@@ -10,6 +10,8 @@ name: Gradle Package
 on:
   release:
     types: [created]
+  branch:
+    - main
 
 jobs:
   build:

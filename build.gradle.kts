@@ -33,7 +33,7 @@ publishing {
   repositories {
     maven {
       name = "GitHubPackages"
-      url = uri("https://maven.pkg.github.com/${System.getenv("GITHUB_REPOSITORY") ?: "Kosta-Git/ccTalk"}")
+      url = uri("https://maven.pkg.github.com/Kosta-Git/ccTalk")
       credentials {
         username = System.getenv("GITHUB_ACTOR") ?: System.getenv("GITHUB_USERNAME")
         password = System.getenv("GITHUB_TOKEN")
@@ -46,7 +46,7 @@ publishing {
       pom {
         name.set("ccTalk")
         description.set("ccTalk implementation for CCT910 in Kotlin")
-        url.set("https://github.com/Kosta-Git/ccTalk")
+        url = "https://maven.pkg.github.com/Kosta-Git/ccTalk"
       }
     }
   }
