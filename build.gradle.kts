@@ -44,6 +44,8 @@ publishing {
     register<MavenPublication>("gpr") {
       from(components["java"])
       pom {
+        groupId = "io.github.kosta-git"
+        artifactId = "ccTalk"
         url = "https://maven.pkg.github.com/kosta-git/ccTalk.git"
       }
     }
