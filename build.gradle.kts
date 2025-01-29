@@ -33,7 +33,7 @@ publishing {
   repositories {
     maven {
       name = "GitHubPackages"
-      url = uri("https://maven.pkg.github.com/Kosta-Git/ccTalk")
+      url = uri("https://maven.pkg.github.com/kosta-git/cctalk")
       credentials {
         username = System.getenv("GITHUB_ACTOR") ?: System.getenv("GITHUB_USERNAME")
         password = System.getenv("GITHUB_TOKEN")
@@ -44,7 +44,7 @@ publishing {
     register<MavenPublication>("gpr") {
       from(components["java"])
       pom {
-        url = "https://maven.pkg.github.com/Kosta-Git/ccTalk.git"
+        url = "https://maven.pkg.github.com/kosta-git/ccTalk.git"
       }
     }
   }
