@@ -3,7 +3,7 @@ plugins {
   `maven-publish`
 }
 
-group = "com.github.kosta-git"
+group = "cctalk"
 version = "0.1.0"
 
 repositories {
@@ -43,11 +43,8 @@ publishing {
   publications {
     register<MavenPublication>("gpr") {
       groupId = "com.github.kosta-git"
-      artifactId = "ccTalk"
+      artifactId = "cctalk"
       from(components["java"])
-      pom {
-        url = "https://maven.pkg.github.com/kosta-git/ccTalk.git"
-      }
     }
   }
 }
