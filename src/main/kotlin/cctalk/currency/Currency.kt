@@ -5,10 +5,10 @@ import kotlin.math.pow
 data class CoinValue(
   val id: String,
   val value: Double,
-  val decimals: Int
+  val euroCent: Int
 ) {
   val intValue: Int
-    get() = (value * 10.0.pow(decimals.toDouble())).toInt()
+    get() = (value * 10.0.pow(euroCent.toDouble())).toInt()
 }
 
 data class ValueFactor(val factor: Char, val face: Double) {
