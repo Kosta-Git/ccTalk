@@ -175,14 +175,16 @@ class SelectorDevice(
             raise(CcTalkError.WrongParameterError("currvals must have at least 16 elements"))
         }
 
-        for (i in 0 until 16) {
-            talkCcNoResponse {
-                withDefaults(this@SelectorDevice)
-                header(MODIFY_SORTER_PATH)
-                data(intArrayOf(i + 1, sorterPaths[i].sorterPath))
-            }.bind()
-        }
+        for (i in 0 until 16) setCoinSorterPath(i, sorterPaths[i]).bind()
         CcTalkStatus.Ok
+    }
+
+    suspend fun setCoinSorterPath(coinId: Int, sorterPath: SelCoinStatus): Either<CcTalkError, CcTalkStatus> = either {
+        talkCcNoResponse {
+            withDefaults(this@SelectorDevice)
+            header(MODIFY_SORTER_PATH)
+            data(intArrayOf(coinId + 1, sorterPath.sorterPath))
+        }.bind()
     }
 
     /**
@@ -303,7 +305,7 @@ class SelectorDevice(
 
         val id = coinId.substring(0, 2)
         if (id == "..") {
-          return null.right()
+            return null.right()
         }
         for (i in 2 until 5) {
             if (coinId[i].isDigit()) {
@@ -364,11 +366,11 @@ class SelectorDevice(
             .map { i -> 0x0001L shl i }
             .mapIndexed { index: Int, mask: Long ->
                 (index + 1) to
-                SelCoinStatus(
-                    coinable = (inhibitStatusFlags and mask) != 0L,
-                    overridePath = false,
-                    sorterPath = getSorterPath(index).bind()
-                )
+                        SelCoinStatus(
+                            coinable = (inhibitStatusFlags and mask) != 0L,
+                            overridePath = false,
+                            sorterPath = getSorterPath(index).bind()
+                        )
             }
             .toMap()
     }

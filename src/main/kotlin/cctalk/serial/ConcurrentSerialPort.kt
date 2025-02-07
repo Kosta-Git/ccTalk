@@ -38,8 +38,6 @@ class ConcurrentSerialPort(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val sendQueue = Channel<PacketRequest>(Channel.UNLIMITED)
 
-    private var lastCommunicationTime = System.currentTimeMillis()
-
     init {
         startQueueProcessor()
     }
@@ -52,7 +50,6 @@ class ConcurrentSerialPort(
             while (isRunning.get()) {
                 try {
                     val request = sendQueue.receive()
-                    ensureCommunicationDelay()
 
                     try {
                         val response = sendPacketInternal(request.data)
@@ -78,7 +75,6 @@ class ConcurrentSerialPort(
             var written = writeBytes(payload, payload.size)
             if (written != payload.size) raise(CcTalkError.WriteError("Failed to write all bytes"))
             port.flushIOBuffers()
-            lastCommunicationTime = System.currentTimeMillis()
 
             if (localEcho) {
                 val echo = readBytes(ByteArray(payload.size), payload.size)
@@ -91,7 +87,6 @@ class ConcurrentSerialPort(
 
             while (true) {
                 if (System.currentTimeMillis() - startTime > timeOut) {
-                    lastCommunicationTime = System.currentTimeMillis()
                     raise(CcTalkError.TimeoutError())
                 }
 
@@ -99,8 +94,6 @@ class ConcurrentSerialPort(
                 if (available > 0) {
                     val tempBuffer = ByteArray(available)
                     val bytesRead = readBytes(tempBuffer, available)
-                    lastCommunicationTime = System.currentTimeMillis()
-
                     if (bytesRead > 0) buffer.addAll(tempBuffer.take(bytesRead))
                 }
 
@@ -108,17 +101,11 @@ class ConcurrentSerialPort(
                     return buffer.toByteArray().right()
                 }
                 if (available > 0) hasRead = true
-                if (available == 0) delay(20) else delay(1)
+                if (available == 0) delay(5)
             }
 
             return buffer.toByteArray().right()
         }
-    }
-
-    private suspend fun ensureCommunicationDelay() {
-        if (communicationDelay == 0) return;
-        val time = lastCommunicationTime + communicationDelay - System.currentTimeMillis()
-        if (time > 0) delay(time)
     }
 
     override suspend fun sendPacket(packet: ByteArray): Either<CcTalkError, ByteArray> {
@@ -133,7 +120,7 @@ class ConcurrentSerialPort(
         numDataBits = DATA_BITS
         numStopBits = STOP_BITS
         parity = PARITY
-        setRs485ModeParameters(true, false, 50, 50)
+        setRs485ModeParameters(true, false, 0, communicationDelay)
         setComPortTimeouts(
             SerialPort.TIMEOUT_READ_SEMI_BLOCKING or SerialPort.TIMEOUT_WRITE_BLOCKING,
             timeOut.toInt(),
