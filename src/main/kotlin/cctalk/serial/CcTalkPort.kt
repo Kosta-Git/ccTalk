@@ -8,6 +8,7 @@ import cctalk.packet.CcTalkPacket
 import cctalk.packet.CcTalkPacketBuilder
 import cctalk.serde.CcTalkSerializer
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 interface CcTalkPort {
@@ -109,10 +110,38 @@ class CcTalkPortImpl(
     talkCc(CcTalkPacket.build(packet))
 
   override suspend fun talkCc(packet: CcTalkPacket): Either<CcTalkError, CcTalkPacket> = withContext(NonCancellable) {
-    either {
-      val (serialized, _) = serializer.serialize(packet)
-      val response = port.sendPacket(serialized).bind()
-      serializer.deserialize(response, packet.checksumType).bind()
+    retryOperation(3) {
+      either {
+        val (serialized, _) = serializer.serialize(packet)
+        val response = port.sendPacket(serialized).bind()
+        serializer.deserialize(response, packet.checksumType).bind()
+      }
     }
+  }
+
+  private suspend fun <T> retryOperation(
+    maxAttempts: Int,
+    operation: suspend () -> Either<CcTalkError, T>
+  ): Either<CcTalkError, T> {
+    var lastError: CcTalkError? = null
+
+    for (attempt in 1..maxAttempts) {
+      val result = operation()
+
+      when (result) {
+        is Either.Right -> return result
+        is Either.Left -> {
+          lastError = result.value
+
+          // If this isn't the last attempt, delay before retrying
+          if (attempt < maxAttempts) {
+            delay(50)
+          }
+        }
+      }
+    }
+
+    // If we get here, all attempts failed
+    return Either.Left(lastError ?: CcTalkError.UnknownError("All retry attempts failed"))
   }
 }

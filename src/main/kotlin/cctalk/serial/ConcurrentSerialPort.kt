@@ -85,6 +85,8 @@ class ConcurrentSerialPort(
             val startTime = System.currentTimeMillis()
             var hasRead = false
 
+            delay(communicationDelay.toLong())
+
             while (true) {
                 if (System.currentTimeMillis() - startTime > timeOut) {
                     raise(CcTalkError.TimeoutError())
@@ -101,7 +103,7 @@ class ConcurrentSerialPort(
                     return buffer.toByteArray().right()
                 }
                 if (available > 0) hasRead = true
-                if (available == 0) delay(5)
+                if (available == 0) delay(10)
             }
 
             return buffer.toByteArray().right()
@@ -120,7 +122,7 @@ class ConcurrentSerialPort(
         numDataBits = DATA_BITS
         numStopBits = STOP_BITS
         parity = PARITY
-        setRs485ModeParameters(true, false, 0, communicationDelay)
+        setRs485ModeParameters(false, false, 0, 0)
         setComPortTimeouts(
             SerialPort.TIMEOUT_READ_SEMI_BLOCKING or SerialPort.TIMEOUT_WRITE_BLOCKING,
             timeOut.toInt(),
