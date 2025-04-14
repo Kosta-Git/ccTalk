@@ -41,7 +41,7 @@ class ConcurrentSerialPortTest {
         every { mockPort.clearDTR() } returns true
         every { mockPort.clearRTS() } returns true
         every { mockPort.flushIOBuffers() } returns true
-        every { mockPort.setRs485ModeParameters(true, false, 0, 0) } returns true
+        every { mockPort.setRs485ModeParameters(false, false, 0, 0) } returns true
 
         serialPort = ConcurrentSerialPort(
             port = mockPort,
@@ -70,12 +70,12 @@ class ConcurrentSerialPortTest {
             mockPort.numDataBits = DATA_BITS
             mockPort.numStopBits = STOP_BITS
             mockPort.parity = PARITY
+            mockPort.setRs485ModeParameters(false, false, 0, 0)
             mockPort.setComPortTimeouts(
                 SerialPort.TIMEOUT_READ_SEMI_BLOCKING or SerialPort.TIMEOUT_WRITE_BLOCKING,
                 100,
                 100
             )
-            mockPort.setRs485ModeParameters(true, false, 0, 0)
         }
     }
 
