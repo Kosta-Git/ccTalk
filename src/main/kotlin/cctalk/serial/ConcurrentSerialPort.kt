@@ -77,6 +77,11 @@ class ConcurrentSerialPort(
             port.flushIOBuffers()
 
             if (localEcho) {
+                // Shitty windows only issue
+                if (System.getProperty("os.name").lowercase().contains("windows")) {
+                    delay(25)
+                }
+
                 val echo = readBytes(ByteArray(payload.size), payload.size)
                 if (echo != payload.size) raise(CcTalkError.CommunicationError("Local echo does not match"))
             }

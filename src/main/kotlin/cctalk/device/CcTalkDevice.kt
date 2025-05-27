@@ -65,7 +65,9 @@ open class CcTalkDevice(
         const val REQUEST_BUFFERED_BILL_EVENTS = 159
         const val SETUP_BILL_ESCROW = 153
         const val REQUEST_BILL_ESCROW_STATUS = 152
+        const val REQUEST_COUNTRY_SCALE_FACTOR = 156
         const val REQUEST_BILL_ID = 157
+        const val BILL_RECYCLER_STATUS = 29
 
     }
 

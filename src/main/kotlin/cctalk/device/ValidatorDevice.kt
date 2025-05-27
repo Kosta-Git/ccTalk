@@ -8,11 +8,13 @@ import be.inotek.communication.CcTalkChecksumTypes
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.currency.Currency
+import cctalk.device.CcTalkDevice.CcTalkCommand.BILL_RECYCLER_STATUS
 import cctalk.device.CcTalkDevice.CcTalkCommand.GET_MASTER_INHIBIT
 import cctalk.device.CcTalkDevice.CcTalkCommand.MODIFY_BILL_INHIBIT_STATUS
 import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_BILL_ID
 import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_BILL_INHIBIT_STATUS
 import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_BUFFERED_BILL_EVENTS
+import cctalk.device.CcTalkDevice.CcTalkCommand.REQUEST_COUNTRY_SCALE_FACTOR
 import cctalk.device.CcTalkDevice.CcTalkCommand.ROUTE_BILL
 import cctalk.device.CcTalkDevice.CcTalkCommand.SET_MASTER_INHIBIT
 import cctalk.device.CcTalkDevice.CcTalkCommand.SETUP_BILL_ESCROW
@@ -27,7 +29,7 @@ class ValidatorDevice(
     checksumType: CcTalkChecksumTypes = CcTalkChecksumTypes.CRC16
 ) : CcTalkDevice(port, address, checksumType) {
     companion object {
-        const val MAX_EVENT_POLL = 16
+        const val MAX_EVENT_POLL = 5
     }
 
     private val countryScaleFactor = mutableListOf<CountryScaleFactor>()
@@ -48,6 +50,20 @@ class ValidatorDevice(
         for (i in 0..15) {
             countryScaleFactor.add(CountryScaleFactor("XX", 1, 2))
         }
+    }
+
+    suspend fun initialize() = either {
+        val name = talkCcStringResponse {
+            withDefaults(this@ValidatorDevice)
+            header(244)
+        }.bind()
+
+        if (name.lowercase() != "vega") return Unit.right()
+
+        rcSupported = true
+        rcConnected = true
+        type = BillRecyclerType.JCMVegaCcTalk
+        rcCount = 1
     }
 
     /**
@@ -82,7 +98,7 @@ class ValidatorDevice(
             withDefaults(this@ValidatorDevice)
             header(152) // REQUEST_BILL_ESCROW_STATUS
         }.bind()
-        
+
         ensure(result.dataLength >= 1) { CcTalkError.DataLengthError(1, 255, result.dataLength) }
         (result.data[0] and 0x02) != 0
     }
@@ -131,9 +147,9 @@ class ValidatorDevice(
             return BillValue(0.0, "", 0).right()
         }
 
-        val valueString = billId.substring(2, 5)
-        val currency = Currency.Search.byCcTalkID(currencyId) ?: 
-            raise(CcTalkError.PayloadError("unknown currency: $currencyId"))
+        val valueString = billId.substring(2).filter { it.isDigit() }
+        val currency =
+            Currency.Search.byCcTalkID(currencyId) ?: raise(CcTalkError.PayloadError("unknown currency: $currencyId"))
 
         val billValue = try {
             val value = valueString.toDouble()
@@ -142,7 +158,32 @@ class ValidatorDevice(
             raise(CcTalkError.PayloadError("invalid bill value: $valueString"))
         }
 
-        BillValue(billValue, currencyId, currency.decimals)
+        val scaleFactor = getCountryScalingFactor(currencyId).bind()
+        val adjustedBillValue = billValue * scaleFactor.factor.toDouble()
+
+        BillValue(adjustedBillValue, currencyId, currency.decimals)
+    }
+
+    suspend fun getCountryScalingFactor(id: String): Either<CcTalkError, CountryScaleFactor> = either {
+        val scaleFactor = countryScaleFactor.firstOrNull { it.id == id }
+        if(scaleFactor != null) {
+            return scaleFactor.right()
+        }
+
+        val response = talkCc {
+            withDefaults(this@ValidatorDevice)
+            header(REQUEST_COUNTRY_SCALE_FACTOR)
+            data(byteArrayOf(id[0].code.toByte(), id[1].code.toByte()))
+        }.bind()
+
+        val factor = if(response.dataLength >= 2) response.data[0] + (response.data[1] * 256) else 1
+        val dec = if(response.dataLength >= 3) response.data[2] else 2
+
+        // update or add the scale factor
+        val newScaleFactor = CountryScaleFactor(id, factor.toLong(), dec)
+        countryScaleFactor.removeIf { it.id == id }
+        countryScaleFactor.add(newScaleFactor)
+        newScaleFactor
     }
 
     /**
@@ -175,7 +216,7 @@ class ValidatorDevice(
 
         (0 until 16).map { i ->
             val mask = 0x0001L shl i
-            ValidatorBillStatus(inhibit = (inhibitStatus and mask) != 0L)
+            ValidatorBillStatus(accept = (inhibitStatus and mask) != 0L)
         }
     }
 
@@ -189,7 +230,7 @@ class ValidatorDevice(
 
         var inhibit = 0
         for (i in 0 until 16) {
-            if (billStatuses[i].inhibit) {
+            if (billStatuses[i].accept) {
                 inhibit = inhibit or (0x0001 shl i)
             }
         }
@@ -205,7 +246,7 @@ class ValidatorDevice(
      * Set the same inhibit status for all 16 bills.
      */
     suspend fun setBillInhibit(billEnable: Boolean): Either<CcTalkError, CcTalkStatus> = either {
-        val billStatuses = (0 until 16).map { ValidatorBillStatus(inhibit = billEnable) }
+        val billStatuses = (0 until 16).map { ValidatorBillStatus(accept = billEnable) }
         setBillInhibit(billStatuses).bind()
     }
 
@@ -244,7 +285,7 @@ class ValidatorDevice(
             header(REQUEST_BUFFERED_BILL_EVENTS)
         }.bind()
 
-        ensure(eventsData.dataLength >= 11) {
+        ensure(eventsData.dataLength == 11) {
             CcTalkError.DataFormatError(11, eventsData.dataLength)
         }
 
@@ -252,7 +293,7 @@ class ValidatorDevice(
 
         // Just reset
         if (receivedEventCounter == 0 && eventCounter < 0) {
-            eventCounter = 0
+            eventCounter = 1
             pollResponses.add(ValidatorPollResponse(ValidatorPollEvent.Reset, -1, ValidatorBillPosition.Unknown))
             return ValidatorPollResponseList(1, 0, pollResponses).right()
         }
@@ -264,7 +305,7 @@ class ValidatorDevice(
             (255 - eventCounter) + receivedEventCounter
         }
 
-        eventCounter = receivedEventCounter
+        eventCounter = eventsData.data[0].toUByte().toInt()
         val lostEvents = if (receivedEvents > MAX_EVENT_POLL) receivedEvents - MAX_EVENT_POLL else 0
 
         for (i in 0 until min(receivedEvents, MAX_EVENT_POLL)) {
@@ -273,22 +314,34 @@ class ValidatorDevice(
             var billPosition = ValidatorBillPosition.Unknown
 
             if (eventsData.data[i * 2 + 1].toUByte().toInt() == 0) {
-                status = ValidatorPollEvent.fromCode(eventsData.data[i * 2 + 2].toUByte().toInt())
+                try {
+                    status = ValidatorPollEvent.fromCode(eventsData.data[i * 2 + 2].toUByte().toInt())
+                } catch (e: Exception) {
+                    status = ValidatorPollEvent.Unknown
+                }
+
                 if (status == ValidatorPollEvent.Returned) billInEscrow = false
                 if (status == ValidatorPollEvent.AFD_Locked) masterInhibit = true
                 if (status == ValidatorPollEvent.AFD_Unlocked) masterInhibit = false
             } else {
                 status = ValidatorPollEvent.Bill
                 billIndex = (eventsData.data[i * 2 + 1].toUByte().toInt() - 1) and 0x001f
-                billPosition = ValidatorBillPosition.fromCode(eventsData.data[i * 2 + 2].toUByte().toInt())
-                
-                when (billPosition) {
-                    ValidatorBillPosition.Escrow -> billInEscrow = true
-                    ValidatorBillPosition.Stacked,
-                    ValidatorBillPosition.AFD_DispenserSS1,
-                    ValidatorBillPosition.AFD_DispenserSS2,
-                    ValidatorBillPosition.AFD_DispenserSS3 -> billInEscrow = false
-                    else -> {}
+
+                try {
+                    billPosition = ValidatorBillPosition.fromCode(eventsData.data[i * 2 + 2].toUByte().toInt())
+
+                    when (billPosition) {
+                        ValidatorBillPosition.Escrow -> billInEscrow = true
+                        ValidatorBillPosition.Stacked,
+                        ValidatorBillPosition.AFD_DispenserSS1,
+                        ValidatorBillPosition.AFD_DispenserSS2,
+                        ValidatorBillPosition.AFD_DispenserSS3 -> billInEscrow = false
+
+                        else -> {}
+                    }
+                } catch (e: Exception) {
+                    billPosition = ValidatorBillPosition.Unknown
+                    billInEscrow = false
                 }
             }
             pollResponses.add(ValidatorPollResponse(status, billIndex, billPosition))
@@ -303,5 +356,50 @@ class ValidatorDevice(
             lostEvents,
             pollResponses
         )
+    }
+
+    suspend fun getRecyclerStatus(): Either<CcTalkError, BillRecyclerStatus> = either {
+        if (!rcConnected) {
+            raise(CcTalkError.UnsupportedError("Recycler not connected"))
+        }
+
+        if (type != BillRecyclerType.JCMVegaCcTalk) {
+            raise(CcTalkError.UnsupportedError("Recycler type not supported: $type"))
+        }
+
+        val status = talkCc {
+            withDefaults(this@ValidatorDevice)
+            header(BILL_RECYCLER_STATUS)
+        }.bind()
+
+        if (status.dataLength == 0) {
+            raise(CcTalkError.DataFormatError(1, status.dataLength))
+        }
+
+        if (rcCount < 2) {
+            BillRecyclerStatus(
+                Status = RecyclerFlags.fromCode(status.data[0].toLong()),
+                PayOutReject = BillPayoutRejectCode.Normal,
+                Remaining = status.data[2],
+                LastDispensed = status.data[3],
+                LastUndispensed = status.data[4],
+                Stored = status.data[5],
+                Storing = status.data[6],
+                PayRejectCount = 0,
+                PayRejectedCount = 0
+            )
+        } else {
+            BillRecyclerStatus(
+                Status = RecyclerFlags.fromCode((status.data[0] and 0xF9 or status.data[rcIdx + 2] and 0x06).toLong()),
+                PayOutReject = BillPayoutRejectCode.fromCode(status.data[1] and 0x03),
+                Remaining = status.data[rcCount + 3],
+                LastDispensed = status.data[rcCount + 4],
+                LastUndispensed = status.data[rcCount + 5],
+                Stored = status.data[rcCount + 6],
+                Storing = status.data[rcCount + 7],
+                PayRejectCount = status.data[rcCount + 8],
+                PayRejectedCount = status.data[rcCount + 9]
+            )
+        }
     }
 }

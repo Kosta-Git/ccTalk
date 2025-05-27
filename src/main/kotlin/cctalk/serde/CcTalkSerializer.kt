@@ -88,7 +88,7 @@ class CcTalkSerializerImpl : CcTalkSerializer {
       data(IntArray(data.size - 5) { data[DATA_OFFSET + it].toUByte().toInt() })
       checksum(data[data.size - 1].toUByte().toInt())
       checksumType(checksumType)
-      if(advertisedDataLength != data.size - 5) raise(CcTalkError.DataFormatError(advertisedDataLength, data.size - 5))
+      if(advertisedDataLength != data.size - 5 && checksumType != CcTalkChecksumTypes.CRC16) raise(CcTalkError.DataFormatError(advertisedDataLength, data.size - 5))
     }.build().apply {
       if (verifyChecksum && !isChecksumValid()) raise(CcTalkError.ChecksumError())
     }
