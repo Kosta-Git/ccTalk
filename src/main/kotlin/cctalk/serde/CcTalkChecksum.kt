@@ -25,7 +25,7 @@ fun CcTalkPacket.computeCrc16Checksum(): Int {
     crc = crc xor (it shl 8).toUShort()
     for (j in 0 until 8) {
       if ((crc and 0x8000u).toInt() != 0)
-        crc = crc xor 0x1021u
+        crc = ((crc.toInt() shl 1) xor 0x1021).toUShort()
       else
         crc = (crc.toInt() shl 1).toUShort()
     }

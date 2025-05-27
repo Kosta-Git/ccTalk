@@ -50,8 +50,12 @@ class CcTalkPacket {
 
         CcTalkChecksumTypes.CRC16 -> {
           val computedChecksum = getCheckSum()
+          // Initial code
           this.source = (computedChecksum and 0xFF).toUByte().toInt()
           this.checksum = ((computedChecksum shr 8) and 0xFF).toUByte().toInt()
+          // Fixed??
+          //this.checksum = (computedChecksum and 0xFF).toUByte().toInt()
+          //this.source = ((computedChecksum shr 8) and 0xFF).toUByte().toInt()
         }
       }
     } else {

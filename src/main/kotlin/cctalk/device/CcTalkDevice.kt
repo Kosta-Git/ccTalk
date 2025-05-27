@@ -58,6 +58,15 @@ open class CcTalkDevice(
         const val PRE_COIN_INHIBIT_COMPAT = 179
         const val MODIFY_INHIBIT_STATUS = 231
 
+        // Bill validator headers
+        const val REQUEST_BILL_INHIBIT_STATUS = 230
+        const val MODIFY_BILL_INHIBIT_STATUS = 231
+        const val ROUTE_BILL = 154
+        const val REQUEST_BUFFERED_BILL_EVENTS = 159
+        const val SETUP_BILL_ESCROW = 153
+        const val REQUEST_BILL_ESCROW_STATUS = 152
+        const val REQUEST_BILL_ID = 157
+
     }
 
     private val manufacturerId by cachedCcTalkProp {
