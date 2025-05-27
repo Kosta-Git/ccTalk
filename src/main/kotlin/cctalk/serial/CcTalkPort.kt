@@ -2,6 +2,7 @@ package cctalk.serial
 
 import arrow.core.Either
 import arrow.core.raise.either
+import be.inotek.communication.CcTalkChecksumTypes
 import cctalk.CcTalkError
 import cctalk.CcTalkStatus
 import cctalk.packet.CcTalkPacket
@@ -114,7 +115,7 @@ class CcTalkPortImpl(
       either {
         val (serialized, _) = serializer.serialize(packet)
         val response = port.sendPacket(serialized).bind()
-        serializer.deserialize(response, packet.checksumType).bind()
+        serializer.deserialize(response, packet.checksumType, packet.checksumType == CcTalkChecksumTypes.Simple8).bind()
       }
     }
   }
