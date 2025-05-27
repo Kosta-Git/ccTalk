@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "cctalk"
-version = "0.3.0"
+version = "1.0.1"
 
 repositories {
   mavenCentral()
